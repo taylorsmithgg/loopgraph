@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>loopgraph — Deterministic goal-state substrate for agent loops</title>
+<meta name="description" content="Deterministic goal-state substrate for agent loops. Criteria live in a context graph; done is computed from evidence, never claimed by an agent.">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="masthead"><div class="inner">
+  <a class="name" href="index.html">loopgraph</a>
+  <span class="tag">Deterministic goal-state substrate for agent loops</span>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/taylorsmithgg/loopgraph">GitHub</a>
+</div></header>
+<div class="wrap">
+<nav class="side">
+<ul>
+<li><a href="index.html" class="current">Overview</a></li>
+</ul>
+<h2>Guide</h2>
+<ul>
+<li><a href="cli.html">CLI &amp; exit codes</a></li>
+<li><a href="gates.html">Gates</a></li>
+<li><a href="memory.html">Memory</a></li>
+<li><a href="audit.html">Audit &amp; routing</a></li>
+</ul>
+<h2>Background</h2>
+<ul>
+<li><a href="design.html">Design</a></li>
+<li><a href="coordination.html">Coordination design</a></li>
+<li><a href="implementation-plan.html">Implementation plan</a></li>
+<li><a href="followups.html">Open questions</a></li>
+</ul>
+<h2>Evidence</h2>
+<ul>
+<li><a href="evidence/index.html">What was measured</a></li>
+<li><a href="evidence/corpus-baseline.html">Corpus baseline</a></li>
+<li><a href="evidence/mechanism-benchmarks.html">Mechanism benchmarks</a></li>
+<li><a href="evidence/subagent-failure-taxonomy.html">Subagent failure taxonomy</a></li>
+<li><a href="evidence/prior-art-review.html">Prior art review</a></li>
+</ul>
+</nav>
+<main>
+<h1 id="loopgraph">loopgraph</h1>
+<p class="lede">Criteria live in a context graph. "Done" is computed from
+evidence, never claimed by an agent. Harness hooks read the graph and refuse to
+let a turn end while the specification is unmet.</p>
+
+<p>An agent that grades its own work will tell you it is finished. That is not
+dishonesty, it is the absence of a fact to check against — so loopgraph
+supplies one. A criterion is a statement plus a command plus an expectation.
+The command runs, the expectation holds or it does not, and the loop's exit
+condition is derived from that rather than asserted in prose.</p>
+<p>Everything here is deterministic: SQLite, subprocesses, exit codes. No model is
+in the path of any decision the gates make. The one place a second model does
+appear — <a href="audit.html">auditing a check for spec-gaming</a> — runs at authoring time,
+gates nothing, and hands its verdict to a human.</p>
+<div class="cards">
+  <a class="card" href="cli.html"><b>CLI &amp; exit codes</b><span>Three different exit-code contracts. Getting them confused in a hook is a real hazard.</span></a>
+  <a class="card" href="gates.html"><b>Gates</b><span>The scope gate on dispatch, the loop gate on turn end, and the limits that stop either trapping a session.</span></a>
+  <a class="card" href="memory.html"><b>Memory</b><span>Retain, recall, supersede on the same graph — with a default-deny recall scope.</span></a>
+  <a class="card" href="audit.html"><b>Audit &amp; routing</b><span>A second vendor asking whether a check can be satisfied without doing the work.</span></a>
+  <a class="card" href="design.html"><b>Design</b><span>The specification this was built from, including what was rejected.</span></a>
+  <a class="card" href="evidence/index.html"><b>Evidence</b><span>The measurements behind the design decisions, including the ones that came out against the design.</span></a>
+</div>
+
+<h2 id="install">Install</h2>
+<p>Python 3.12+, no runtime dependencies. <a href="https://docs.astral.sh/uv/"><code>uv</code></a> is
+used for the venv and the console script.</p>
+<div class="codehilite"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/taylorsmithgg/loopgraph<span class="w"> </span>~/src/loopgraph
+<span class="nb">cd</span><span class="w"> </span>~/src/loopgraph
+uv<span class="w"> </span>sync
+uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-q<span class="w">                      </span><span class="c1"># 402 tests, ~14s</span>
+
+<span class="c1"># &#39;loopgraph&#39; from any directory</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">LOOPGRAPH_HOME</span><span class="o">=</span>~/src/loopgraph<span class="w">          </span><span class="c1"># add to your shell profile</span>
+install<span class="w"> </span>-m<span class="w"> </span><span class="m">755</span><span class="w"> </span>dist/loopgraph-shim.sh<span class="w"> </span>~/.local/bin/loopgraph
+
+<span class="c1"># optional: /loopgraph slash command in Claude Code</span>
+cp<span class="w"> </span>dist/slash-command.md<span class="w"> </span>~/.claude/commands/loopgraph.md
+</code></pre></div>
+
+<p>Nothing is written into your project: state lives in <code>~/.loopgraph/&lt;sha of repo
+root&gt;.db</code>. Both gates are inert until you give them something, so installing
+loopgraph changes no behaviour until a <code>SCOPE:</code> line or a criterion appears.</p>
+<h2 id="a-first-specification">A first specification</h2>
+<div class="codehilite"><pre><span></span><code><span class="gp">$ </span>loopgraph<span class="w"> </span>add<span class="w"> </span>C1<span class="w"> </span><span class="s2">&quot;the queue drains under restart&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cmd<span class="w"> </span><span class="s1">&#39;for i in $(seq 50); do ./restart; done; [ $(in) -eq $(out) ]&#39;</span>
+<span class="go">C1 added   (unproven)</span>
+
+<span class="gp">$ </span>loopgraph<span class="w"> </span>check<span class="p">;</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;exit=</span><span class="nv">$?</span><span class="s2">&quot;</span>
+<span class="go">C1  unproven  the queue drains under restart</span>
+<span class="go">exit=1</span>
+
+<span class="gp">$ </span>loopgraph<span class="w"> </span>run
+<span class="go">C1  closed</span>
+<span class="go">exit=0</span>
+</code></pre></div>
+
+<p><code>add</code> refuses a check that already passes: one that is green before the work
+cannot tell done from not-done. Among checks that do discriminate, the widest
+one wins — see <a href="gates.html#weakness-not-brevity">weakness, not brevity</a>.</p>
+<h2 id="what-it-is-not">What it is not</h2>
+<ul>
+<li><strong>Not a planner.</strong> It holds the definition of done; deciding how to get there
+  is the agent's job.</li>
+<li><strong>Not a judge.</strong> No model scores anything. Measured judges over-reject
+  conformant work 35–45%, which is why nothing here gates on one.</li>
+<li><strong>Not a hosted service.</strong> One SQLite file per repository, on your machine.</li>
+</ul>
+<h2 id="hooks">Hooks</h2>
+<p>Six hooks, all off by default and all failing open — a broken gate allows work
+rather than blocking it. See <a href="gates.html">Gates</a> for what each one does and the
+<a href="design.html">design</a> for why the loop gate needs <code>spec_prompt.py</code> to be
+reachable at all.</p>
+<footer class="site">
+  loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
+  &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/index.md">edit this page</a>
+</footer>
+</main>
+</div>
+</body>
+</html>

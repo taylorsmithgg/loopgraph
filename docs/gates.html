@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gates · loopgraph</title>
+<meta name="description" content="The scope gate on agent dispatch and the loop gate on turn end -- what makes them reachable, and what stops them trapping a session.">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="masthead"><div class="inner">
+  <a class="name" href="index.html">loopgraph</a>
+  <span class="tag">Deterministic goal-state substrate for agent loops</span>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/taylorsmithgg/loopgraph">GitHub</a>
+</div></header>
+<div class="wrap">
+<nav class="side">
+<ul>
+<li><a href="index.html">Overview</a></li>
+</ul>
+<h2>Guide</h2>
+<ul>
+<li><a href="cli.html">CLI &amp; exit codes</a></li>
+<li><a href="gates.html" class="current">Gates</a></li>
+<li><a href="memory.html">Memory</a></li>
+<li><a href="audit.html">Audit &amp; routing</a></li>
+</ul>
+<h2>Background</h2>
+<ul>
+<li><a href="design.html">Design</a></li>
+<li><a href="coordination.html">Coordination design</a></li>
+<li><a href="implementation-plan.html">Implementation plan</a></li>
+<li><a href="followups.html">Open questions</a></li>
+</ul>
+<h2>Evidence</h2>
+<ul>
+<li><a href="evidence/index.html">What was measured</a></li>
+<li><a href="evidence/corpus-baseline.html">Corpus baseline</a></li>
+<li><a href="evidence/mechanism-benchmarks.html">Mechanism benchmarks</a></li>
+<li><a href="evidence/subagent-failure-taxonomy.html">Subagent failure taxonomy</a></li>
+<li><a href="evidence/prior-art-review.html">Prior art review</a></li>
+</ul>
+</nav>
+<main>
+<h1 id="gates">Gates</h1>
+<p><strong>On by default.</strong> This is safe because both gates are inert until you give
+them something: the scope gate is silent unless a dispatch prompt carries a
+<code>SCOPE:</code> line, and the loop gate is silent unless criteria are declared. A repo
+that never opted in is unaffected.</p>
+<p><code>loopgraph off</code> disables both, <code>--only scope|loop</code> disables one, and
+<code>LOOPGRAPH_COORD=0</code> / <code>LOOPGRAPH_LOOP=0</code> force them off without touching state. State lives in <code>~/.loopgraph/&lt;sha of repo root&gt;.db</code>
+— nothing is ever written into your project.</p>
+<p>A <code>PreToolUse</code> hook blocks an <code>Agent</code> dispatch whose scope is already claimed.
+Declare scope in the dispatch prompt:</p>
+<div class="codehilite"><pre><span></span><code>SCOPE: charts/values.yaml sql/57 rules/registry.yaml
+</code></pre></div>
+
+<p>Undeclared scope is not blocked, non-Agent tools pass through, and a broken
+gate allows work rather than blocking it.</p>
+<h2 id="loop-gate">Loop gate</h2>
+<p>Enabled with <code>loopgraph on --only loop</code>. A <code>Stop</code> hook refuses to end
+the turn while declared criteria are unmet.</p>
+<ul>
+<li>Silent when off, or when no criteria are declared.</li>
+<li>Cheap subset each turn (only non-closed criteria), but a <strong>full sweep before
+  declaring success</strong>, so a criterion that closed earlier and broke later is
+  still caught.</li>
+<li>Cannot trap a session, and <strong>two separate limits do that job — the smaller
+  one governs</strong>:</li>
+<li><strong><code>STAGNATION_TURNS</code> (8)</strong> — R-01 fires when nothing has closed in that
+    many turns, ending the drive as <code>stalled</code>. With an unsatisfiable
+    criterion this is what stops it, at 7 blocks. Raising
+    <code>LOOPGRAPH_MAX_BLOCKS</code> alone changes nothing.</li>
+<li><strong><code>LOOPGRAPH_MAX_BLOCKS</code> (default 7)</strong> — the backstop for the other case:
+    a session that keeps closing criteria resets stagnation and could
+    otherwise drive forever.
+  Claude Code enforces its own ceiling at <code>CLAUDE_CODE_STOP_HOOK_BLOCK_CAP</code>
+  (default 8); keep loopgraph's under it, or the harness cuts the drive off
+  mid-flight with its own message instead.</li>
+<li><code>exhausted</code> / <code>stalled</code> / <code>blocked</code> allow the stop and say so — an error is
+  never reported as success.</li>
+<li><code>LOOPGRAPH_LOOP=0</code> forces it off.</li>
+</ul>
+<h2 id="what-makes-it-self-starting">What makes it self-starting</h2>
+<p>The gate is inert with no criteria, so "declare nothing" was always the
+cheapest way past it — and for the tool's whole life, that is what happened
+everywhere. Three deterministic pieces close that, none of them a model call:</p>
+<ul>
+<li><strong>A stated goal is recorded.</strong> <code>UserPromptSubmit</code> files the request as
+  pending and injects the contract.</li>
+<li><strong>A pending goal must be answered.</strong> The <code>Stop</code> hook refuses a turn that
+  declared nothing, twice at most, then allows the stop while saying plainly
+  that the work is <strong>UNVERIFIED, not verified</strong>. The way out is either
+  <code>loopgraph add ...</code> or <code>loopgraph noop --reason "..."</code> — a waiver is a
+  legitimate answer for a question or a lookup, it just has to be an answer.</li>
+<li><strong>The repo's own suite is fenced automatically.</strong> <code>loopgraph baseline</code>
+  detects pytest / npm / cargo / go / make, runs it, and installs it as a
+  <code>--guard</code> if it is observed green. Guards bind every session; a fence that
+  was already down is never installed, so pre-existing breakage cannot hold
+  a turn open. Runs detached, so no prompt ever waits on it.</li>
+</ul>
+<p>Criteria carry their origin: <code>status</code> prints <code>[guard]</code> and <code>[auto]</code>, and
+<code>loopgraph drop &lt;id&gt;</code> withdraws anything that misreads the request.</p>
+<h2 id="weakness-not-brevity">Weakness, not brevity</h2>
+<p><code>add</code> is an entailment gate. It runs the check immediately and <strong>refuses one
+that already passes</strong> — a check that is green before the work cannot tell done
+from not-done, and a graph full of those is what "fully specified, nothing
+happening" looks like. <code>--guard</code> is the deliberate exception (a fence is
+supposed to be green; its job is to stay that way) and <code>--allow-green</code> is the
+manual override.</p>
+<p>Among checks that do discriminate, the widest wins. Following Bennett,
+<a href="https://arxiv.org/abs/2301.12987"><em>The Optimal Choice of Hypothesis Is the Weakest, Not the Shortest</em></a>
+(arXiv:2301.12987): among hypotheses that entail the observations, maximising
+extension generalises 1.1–5× better than minimising description length. A
+criterion is a hypothesis about done-ness and its extension is the set of
+world-states where its check passes, so:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>check</th>
+<th>extension</th>
+<th>what it does to the loop</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test -f done.txt</code></td>
+<td>everything</td>
+<td>proves nothing; refused unless red</td>
+</tr>
+<tr>
+<td><code>grep -q "persistent = true" config.yml</code></td>
+<td>one implementation</td>
+<td>drives toward one guessed fix, fails on a better one</td>
+</tr>
+<tr>
+<td><code>for i in $(seq 50); do ./restart; done; [ $(in) -eq $(out) ]</code></td>
+<td>every working implementation</td>
+<td>holds the outcome, leaves the route open</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>loopgraph.weakness</code> scores this structurally and <code>add</code> warns when a check is
+narrower than the goal it is standing in for. The order matters and is the
+whole idea: <strong>entailment first, weakness second.</strong> Ranking by weakness alone
+selects <code>true</code> every time. Brevity survives only as a tie-break.</p>
+<p>Auto-derivation of criteria by a model was built and dropped: it put a
+multi-second model call on every first prompt and executed generated shell
+nobody had read. <code>weakness.is_safe()</code> remains as the deny-list for any future
+derivation, and refuses <code>rm -rf</code>, <code>git push</code>, <code>sudo</code>, <code>curl | sh</code> and friends.</p>
+<h2 id="one-database-many-sessions">One database, many sessions</h2>
+<p><code>~/.loopgraph/&lt;hash&gt;.db</code> is keyed by git root, falling back to cwd — so every
+session working <strong>outside</strong> a repo shares one graph with every other. Observed
+live: three sessions in <code>$HOME</code>, one of them declaring a goal mid-work while
+the others were held open on criteria they had never heard of.</p>
+<p>A goal belongs to whoever stated it. <code>add</code> stamps the authoring session
+(<code>CLAUDE_CODE_BRIDGE_SESSION_ID</code>, override <code>LOOPGRAPH_SESSION</code>), and:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>criterion</th>
+<th>binds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>goal, stamped with your session</td>
+<td>you</td>
+</tr>
+<tr>
+<td>goal, stamped with another session</td>
+<td>them — not you</td>
+</tr>
+<tr>
+<td>goal, no owner recorded (pre-upgrade, or a session that died)</td>
+<td>nobody</td>
+</tr>
+<tr>
+<td><code>--guard</code></td>
+<td>everyone — a broken suite is not a private matter</td>
+</tr>
+<tr>
+<td><code>--global</code></td>
+<td>everyone, deliberately and out loud</td>
+</tr>
+<tr>
+<td>anything, when no session identity is available at all</td>
+<td>everyone — a gate that quietly stops gating is the one failure never worth risking</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Not enforced is never unmentioned.</strong> Anything open that this session is not
+held to is listed by <code>status</code> and named by the Stop hook on its way past, with
+<code>loopgraph adopt &lt;id&gt;</code> (take it on) and <code>loopgraph drop &lt;id&gt;</code> (remove it)
+alongside it. <code>loopgraph adopt --all</code> takes on every loose one. Silence here
+would just be the original bug wearing a new hat.</p>
+<p><code>status</code> shows the whole board; <code>check</code> answers only for this session's
+specification, or a neighbour's open goal would make it report failure
+forever. <code>status</code> also prints the session identity and shouts <code>MISMATCH</code> if
+the Stop hook ever sees a different one from the CLI — that disagreement would
+otherwise disarm the gate invisibly.</p>
+<p><strong><code>stop_hook_active</code> is not a permission bit.</strong> It is <code>true</code> only while the
+harness is already continuing <em>because</em> a stop hook blocked, and <code>false</code> on
+every ordinary first stop — the exact moment a block works. The gate shipped
+reading <code>false</code> as "cannot block" and was therefore a no-op on every normal
+turn: zero blocks across 15 project databases. It is now used only to reset the
+consecutive-block count when a fresh stop chain starts.</p>
+<h2 id="hooks-installed">Hooks installed</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>event</th>
+<th>script</th>
+<th>effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>UserPromptSubmit</td>
+<td><code>spec_prompt.py</code></td>
+<td>ask for an end-state while none is declared</td>
+</tr>
+<tr>
+<td>UserPromptSubmit</td>
+<td><code>recall_prompt.py</code></td>
+<td>surface relevant memories, or stay silent</td>
+</tr>
+<tr>
+<td>PreToolUse (Agent)</td>
+<td><code>coord_gate.py</code></td>
+<td>refuse dispatch whose <code>SCOPE:</code> is claimed</td>
+</tr>
+<tr>
+<td>PostToolUse (Agent)</td>
+<td><code>coord_release.py</code></td>
+<td>release a foreground agent's claims on return</td>
+</tr>
+<tr>
+<td>SessionStart</td>
+<td><code>session_brief.py</code></td>
+<td>inject recorded traps once per session</td>
+</tr>
+<tr>
+<td>Stop</td>
+<td><code>loop_gate.py</code></td>
+<td>refuse to finish while the specification is unmet</td>
+</tr>
+</tbody>
+</table></div>
+<p>The loop gate is inert until criteria exist, so <code>spec_prompt.py</code> is what makes
+it reachable at all: it asks once, on goal-shaped prompts, and self-silences
+the moment one criterion is declared. <code>LOOPGRAPH_SPEC_PROMPT=0</code> turns it off.</p>
+<p>Every one is off by default and fails open.</p>
+<footer class="site">
+  loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
+  &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/gates.md">edit this page</a>
+</footer>
+</main>
+</div>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memory · loopgraph</title>
+<meta name="description" content="Retain, recall, supersede on the same graph -- deterministic BM25 retrieval, and a default-deny recall scope you configure with your own terms.">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="masthead"><div class="inner">
+  <a class="name" href="index.html">loopgraph</a>
+  <span class="tag">Deterministic goal-state substrate for agent loops</span>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/taylorsmithgg/loopgraph">GitHub</a>
+</div></header>
+<div class="wrap">
+<nav class="side">
+<ul>
+<li><a href="index.html">Overview</a></li>
+</ul>
+<h2>Guide</h2>
+<ul>
+<li><a href="cli.html">CLI &amp; exit codes</a></li>
+<li><a href="gates.html">Gates</a></li>
+<li><a href="memory.html" class="current">Memory</a></li>
+<li><a href="audit.html">Audit &amp; routing</a></li>
+</ul>
+<h2>Background</h2>
+<ul>
+<li><a href="design.html">Design</a></li>
+<li><a href="coordination.html">Coordination design</a></li>
+<li><a href="implementation-plan.html">Implementation plan</a></li>
+<li><a href="followups.html">Open questions</a></li>
+</ul>
+<h2>Evidence</h2>
+<ul>
+<li><a href="evidence/index.html">What was measured</a></li>
+<li><a href="evidence/corpus-baseline.html">Corpus baseline</a></li>
+<li><a href="evidence/mechanism-benchmarks.html">Mechanism benchmarks</a></li>
+<li><a href="evidence/subagent-failure-taxonomy.html">Subagent failure taxonomy</a></li>
+<li><a href="evidence/prior-art-review.html">Prior art review</a></li>
+</ul>
+</nav>
+<main>
+<h1 id="memory">Memory</h1>
+<p><code>loopgraph mem</code> (or the <code>mem</code> shim) is memory on the same graph: <code>retain</code>,
+<code>recall</code>, <code>supersede</code>, <code>history</code>, <code>forget</code>, <code>import</code>. It exists because the
+surveyed options — Hindsight, Supermemory, Graphiti, Mem0, LangMem — each want
+their own store beside a graph that already has typed nodes, typed edges and an
+append-only delta log with a logical clock. What was actually missing was
+retrieval.</p>
+<ul>
+<li><strong>Global, not per-repo.</strong> <code>~/.loopgraph/memory.db</code>. A trap learned in one repo
+  is worth most in a different one.</li>
+<li><strong>Three kinds</strong>, after Hindsight's pathways: <code>world</code> (how things are),
+  <code>experience</code> (what happened to us), <code>model</code> (what we concluded).</li>
+<li><strong>Recall is deterministic</strong> — BM25 over FTS5 with a recency half-life, no
+  model in the path. A model call at recall time taxes every session for a
+  lookup that ranking already does.</li>
+<li><strong>Extraction runs in the session, not a subprocess.</strong> Every surveyed system
+  calls an LLM at retain time; a nested <code>claude -p</code> here takes minutes or dies
+  on auth, and would ship memory content somewhere the conversation had not.
+  The agent holding the conversation already knows what happened.</li>
+<li><strong>Superseding keeps the old belief</strong> and links it. Deleting it would leave the
+  graph asserting we always knew the new thing.</li>
+</ul>
+<p>Recall gates on <strong>term coverage, not a BM25 floor</strong>: an absolute score floor is
+a function of corpus size, so one tuned against 75 memories silences a store
+with five — exactly when a new install gets judged.</p>
+<h4 id="recall-scope-and-your-own-terms">Recall scope, and your own terms</h4>
+<p>One store is reachable from every harness on the machine, and those harnesses
+do not all run the same vendor's model. So recall is <strong>default-deny</strong>: a memory
+classified sensitive is withheld unless <code>LOOPGRAPH_MEM_SCOPE=full</code>, and the
+withholding is <em>announced</em> — "3 withheld at scope=safe" — rather than returning
+an empty list that reads as "nothing is known."</p>
+<p>The shipped classifier only knows patterns that identify anyone's private work:
+IP addresses, emails, AWS ARNs and account ids, credential material, in-cluster
+DNS, private URLs. It deliberately does <strong>not</strong> ship a list of employers,
+clients or clusters. Those differ per operator, and a list of them committed to
+a public repository is the leak it was written to prevent.</p>
+<p>Yours go in <code>~/.loopgraph/sensitive.toml</code> (override with
+<code>LOOPGRAPH_SENSITIVE_CONFIG</code>), which is read at classification time and never
+written to by loopgraph:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Literal terms, matched case-insensitively on word boundaries.</span>
+<span class="n">terms</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;acme&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;acme-console&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;orion&quot;</span><span class="p">]</span>
+<span class="n">terms_why</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;an internal system or client name&quot;</span>
+
+<span class="c1"># Regexes, for shapes a word list cannot express.</span>
+<span class="k">[[pattern]]</span>
+<span class="n">regex</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;\b(?:ACME|GLBX)[-_][A-Z0-9-]{2,}\b&#39;</span>
+<span class="n">why</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;a client host or tenant code&quot;</span>
+</code></pre></div>
+
+<p>An explicit term list, not "any three capitals" — a classifier that fires on
+<code>AWS</code>, <code>SQL</code> and <code>CPU</code> marks everything, and teaches its operator to run
+<code>--scope full</code> by reflex, which is worse than having no classifier at all. A
+config that cannot be parsed prints to stderr and is skipped; it is never
+silently ignored, because a redactor that quietly stops redacting looks exactly
+like one with nothing to redact.</p>
+<footer class="site">
+  loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
+  &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/memory.md">edit this page</a>
+</footer>
+</main>
+</div>
+</body>
+</html>

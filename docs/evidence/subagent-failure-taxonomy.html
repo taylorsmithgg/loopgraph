@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subagent failure taxonomy · loopgraph</title>
+<meta name="description" content="One long session classified into the failure modes the gates are aimed at.">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="masthead"><div class="inner">
+  <a class="name" href="../index.html">loopgraph</a>
+  <span class="tag">Deterministic goal-state substrate for agent loops</span>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/taylorsmithgg/loopgraph">GitHub</a>
+</div></header>
+<div class="wrap">
+<nav class="side">
+<ul>
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<h2>Guide</h2>
+<ul>
+<li><a href="../cli.html">CLI &amp; exit codes</a></li>
+<li><a href="../gates.html">Gates</a></li>
+<li><a href="../memory.html">Memory</a></li>
+<li><a href="../audit.html">Audit &amp; routing</a></li>
+</ul>
+<h2>Background</h2>
+<ul>
+<li><a href="../design.html">Design</a></li>
+<li><a href="../coordination.html">Coordination design</a></li>
+<li><a href="../implementation-plan.html">Implementation plan</a></li>
+<li><a href="../followups.html">Open questions</a></li>
+</ul>
+<h2>Evidence</h2>
+<ul>
+<li><a href="../evidence/index.html">What was measured</a></li>
+<li><a href="../evidence/corpus-baseline.html">Corpus baseline</a></li>
+<li><a href="../evidence/mechanism-benchmarks.html">Mechanism benchmarks</a></li>
+<li><a href="../evidence/subagent-failure-taxonomy.html" class="current">Subagent failure taxonomy</a></li>
+<li><a href="../evidence/prior-art-review.html">Prior art review</a></li>
+</ul>
+</nav>
+<main>
+<h1 id="subagent-failure-taxonomy-one-long-infrastructure-session-2026-08-03">Subagent failure taxonomy — one long infrastructure session, 2026-08-03</h1>
+<p>Evidence base: <code>2026-08-03-151432-this-session-is-being-continued-from-a-previous-c.txt</code>, 10,920 lines, 567 KB. Line references are to that file.</p>
+<p><strong>Population:</strong> 39 dispatch sites, 35 distinct agents with a completion record, <strong>26.5 agent-days</strong> of summed wall clock.</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>lifetime</th>
+<th>agents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>&gt; 24 h</td>
+<td>5</td>
+</tr>
+<tr>
+<td>1–4 h</td>
+<td>20</td>
+</tr>
+<tr>
+<td>&lt; 1 h</td>
+<td>10</td>
+</tr>
+</tbody>
+</table></div>
+<p>The five long-runners: <code>Inventory a legacy pipeline for decom</code> 9d 14h (L3724), <code>Fix and extend event normalization</code> 3d 18h (L4519), <code>Cloud sign-in coverage</code> 3d 17h (L4119), <code>Chat and mail detections</code> 3d 17h (L3858), <code>Surface normalized events in the console</code> 3d 17h (L3907). The four clustered at ~3d 17h returned together, which suggests they were <em>outstanding</em> across a suspension rather than computing continuously. The effect is identical: their premises are days stale on return.</p>
+<hr />
+<h2 id="a-expired-conclusions-from-long-outstanding-agents">A. Expired conclusions from long-outstanding agents</h2>
+<p><strong>Confirmed, 4 instances, all among the 5 agents that ran &gt; 24 h.</strong></p>
+<ul>
+<li><strong>L3724–3736</strong> — <code>Inventory a legacy pipeline for decom</code> ran 9.6 days. Its cluster evidence was timestamped 2026-07-24, ten days stale. The retirement it was planning <strong>had already been completed on 2026-07-27</strong>, seven days before it returned, archived at <code>archive/infrastructure/legacy-pipeline/2026-07-27/</code> using the very convention the agent recommended. Every recommendation was obsolete on arrival.</li>
+<li><strong>L3858–3865</strong> — <code>Chat and mail detections</code> ran 3.7 days; the rules it was building had been built by others mid-flight. It declined to open an MR.</li>
+<li><strong>L3907–3910</strong> — <code>Surface normalized events in the console</code>, same pattern, also declined.</li>
+<li><strong>L4119–4145</strong> — <code>Cloud sign-in coverage</code> ran 3.7 days and <strong>did</strong> ship (!515). See B.</li>
+</ul>
+<p>The session diagnosed this itself at <strong>L3895–3900</strong>:</p>
+<blockquote>
+<p>"Two long-running agents have now reported on work that no longer exists… the measurements were sound when taken, and the conclusions drawn from them expired."</p>
+</blockquote>
+<p><strong>Mechanism:</strong> not context loss inside the agent. The agent's world model is correct at dispatch and decays while main moves. Failure occurs at <em>return</em> time.</p>
+<p><strong>What contained it:</strong> agent honesty — two of four declined to ship. That is a behaviour, not a system property, and it cannot be relied on.</p>
+<h2 id="b-duplicate-artifacts-shipped">B. Duplicate artifacts shipped</h2>
+<p><strong>Confirmed, 1 instance.</strong></p>
+<ul>
+<li><strong>L4131–4137</strong> — !515 added <code>azure_impossible_travel</code>, <code>azure_mfa_fatigue</code>, <code>azure_risky_signin</code>, <code>azure_new_asn</code>, each a one-to-one duplicate of <code>entra_*</code> rules already shipped in <code>sql/52</code>. For the four tenants delivering <code>azure.signinlogs</code>, every sign-in would have alerted twice.</li>
+<li><strong>L4180–4181</strong> — "the exact double-alerting <strong>two other agents refused to ship this week</strong>." The refusals existed. They were not reachable by the third agent.</li>
+<li><strong>L4142–4173</strong> — the MR's premise was also already false: it concluded eight tenants must enable an Entra diagnostic setting, but the sign-in data was already arriving nested under <code>azure.activitylogs</code>. Shipping it would have sent eight clients on an unnecessary errand.</li>
+</ul>
+<p><strong>Caught by:</strong> the main loop reviewing the MR on return. No automated guard existed.</p>
+<h2 id="c-namespace-collisions-between-parallel-agents">C. Namespace collisions between parallel agents</h2>
+<p><strong>Confirmed, 2 instances.</strong></p>
+<ul>
+<li><strong>L2271–2280</strong> — !506 <code>sql/57_source_host_hourly.sql</code> vs !510 <code>sql/57_win_service_control.sql</code>. Different filenames, so git reported no conflict, but "duplicate numbering in a repo where file execution order is load-bearing is exactly what caused the LC_COLLATE bug and a two-day bootstrap outage." Both also edited <code>values.yaml</code>.</li>
+<li><strong>L4139–4140</strong> — !515 <code>60_azure_signin_rollup.sql</code> collides with !506 <code>60_telemetry_advisories.sql</code>.</li>
+</ul>
+<p><strong>Mechanism:</strong> nothing reserves an identifier. Two agents independently pick the same slot, and git cannot detect it because the filenames differ.</p>
+<h2 id="d-infrastructure-kills-losing-in-flight-work">D. Infrastructure kills losing in-flight work</h2>
+<p><strong>Confirmed, 4 distinct events.</strong></p>
+<ul>
+<li><strong>L1093–1158</strong> — nine agents killed simultaneously by the weekly API limit. "All nine agents died on the same thing: weekly API limit, resets 2pm Pacific." Relaunched from scratch at L1270–1299; nothing recorded what they had completed before dying.</li>
+<li><strong>L1302–1308, L6913–6920</strong> — <code>Subagent spawn limit reached (200 of 200)</code>. Session-lifetime budget, not concurrency; finished agents do not return slots. Blocked further dispatch entirely and forced a restart to clear.</li>
+<li><strong>L7015–7021</strong> — three background tasks from the previous session with <strong>no completion record</strong>: "may have been stopped… these leave no transcript marker." State unknown, marked stopped.</li>
+<li><strong>L10838–10839</strong> — !540 held because "its agent died mid-reconciliation."</li>
+</ul>
+<h2 id="e-rediscovered-facts">E. Rediscovered facts</h2>
+<p><strong>Confirmed, at least 1 recurring instance.</strong></p>
+<ul>
+<li><strong>L10795–10805</strong> — <code>glab mr merge</code> printed "✓ Merged!" while <code>state</code> remained <code>opened</code> and <code>has_conflicts: True</code>. "That's the <strong>third time today</strong> that trap has mattered."</li>
+<li><strong>L10833–10834</strong> names three such facts explicitly — the <code>--broken</code> exit code, the shellcheck version split, and that <code>glab mr merge</code> lies — as things "I'd otherwise have let it rediscover."</li>
+</ul>
+<p><strong>Mechanism:</strong> hard-won environmental facts live in the main loop's context and do not reach dispatched agents.</p>
+<hr />
+<h2 id="not-failures-redundancy-working">NOT failures — redundancy working</h2>
+<p>Recording these so the fix does not suppress them.</p>
+<ul>
+<li><strong>L2447–2448</strong> — "Three agents independently hit that failure. Two correctly declined to claim it was theirs; one fixed it. <strong>That's the system working.</strong>" Three agents encountering one pre-existing bug is not waste.</li>
+<li><strong>L3867–3872</strong> — the o365 agent "independently converged on the shipped design's load-bearing decisions from scratch… Independent convergence is real validation of those choices."</li>
+<li><strong>L2171</strong> — an agent "declined to re-run rather than add contention, and said so."</li>
+</ul>
+<p>Any mitigation that eliminates overlap entirely would also eliminate independent convergence, which this session valued.</p>
+<hr />
+<h2 id="the-mitigation-the-session-found-empirically">The mitigation the session found empirically</h2>
+<p><strong>L10830–10834</strong>, after the collisions had already happened:</p>
+<blockquote>
+<p>"One agent, not five, handling the four conflicted MRs serially — with the mechanisms from your question actually applied this time: a namespaced scratchpad, an explicit 'do not merge,' the exact write-set named per MR, and the three facts I'd otherwise have let it rediscover."</p>
+</blockquote>
+<p>Five mechanisms, each mapping to a category above:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>mechanism</th>
+<th>addresses</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>serial, not parallel, where writes overlap</td>
+<td>C</td>
+</tr>
+<tr>
+<td>namespaced scratchpad</td>
+<td>C</td>
+</tr>
+<tr>
+<td>explicit "do not merge" (bounded authority)</td>
+<td>B, D</td>
+</tr>
+<tr>
+<td><strong>the exact write-set named per agent</strong></td>
+<td>C</td>
+</tr>
+<tr>
+<td><strong>pre-supplied facts, so they are not rediscovered</strong></td>
+<td>E</td>
+</tr>
+</tbody>
+</table></div>
+<p>Missing from that list, and unaddressed by it: <strong>A</strong> (expired premises) and the reachability half of <strong>B</strong> (a sibling's refusal being invisible).</p>
+<hr />
+<h2 id="summary">Summary</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>category</th>
+<th>instances</th>
+<th>mechanism</th>
+<th>currently caught by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A. Expired conclusions</td>
+<td>4</td>
+<td>premises decay while agent is outstanding</td>
+<td>agent honesty (2 of 4)</td>
+</tr>
+<tr>
+<td>B. Duplicate artifacts</td>
+<td>1</td>
+<td>sibling conclusions unreachable</td>
+<td>main-loop MR review</td>
+</tr>
+<tr>
+<td>C. Namespace collisions</td>
+<td>2</td>
+<td>no identifier reservation</td>
+<td>luck, then manual renumber</td>
+</tr>
+<tr>
+<td>D. Kills losing in-flight work</td>
+<td>4</td>
+<td>no completion record before death</td>
+<td>nothing</td>
+</tr>
+<tr>
+<td>E. Rediscovered facts</td>
+<td>3+</td>
+<td>main-loop context does not reach agents</td>
+<td>repetition</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>The dominant failure is A, and its root cause is agent lifetime.</strong> No shared-state mechanism survives a nine-day snapshot — by the time such an agent returns, anything recorded at dispatch is itself stale. Bounding lifetime addresses A directly and shrinks the window for C and D. It requires no new system.</p>
+<p><strong>The loopgraph criteria model as designed addresses none of these.</strong> It gates session termination on goal completion; every failure here is an agent returning <em>too late</em> or <em>colliding</em>, not a session ending too early. The engine could express C and E as repo invariants — "no two SQL files share a number", "no rule name duplicates a shipped rule" — checked every turn, which would have caught both instances of C at introduction rather than on return. That is a real but partial fit, and it is not what the engine was built for.</p>
+<footer class="site">
+  loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
+  &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/evidence/subagent-failure-taxonomy.md">edit this page</a>
+</footer>
+</main>
+</div>
+</body>
+</html>

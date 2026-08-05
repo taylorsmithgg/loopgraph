@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mechanism benchmarks · loopgraph</title>
+<meta name="description" content="Clock versus content-addressed invalidation over 788 days of commit history.">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="masthead"><div class="inner">
+  <a class="name" href="../index.html">loopgraph</a>
+  <span class="tag">Deterministic goal-state substrate for agent loops</span>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/taylorsmithgg/loopgraph">GitHub</a>
+</div></header>
+<div class="wrap">
+<nav class="side">
+<ul>
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<h2>Guide</h2>
+<ul>
+<li><a href="../cli.html">CLI &amp; exit codes</a></li>
+<li><a href="../gates.html">Gates</a></li>
+<li><a href="../memory.html">Memory</a></li>
+<li><a href="../audit.html">Audit &amp; routing</a></li>
+</ul>
+<h2>Background</h2>
+<ul>
+<li><a href="../design.html">Design</a></li>
+<li><a href="../coordination.html">Coordination design</a></li>
+<li><a href="../implementation-plan.html">Implementation plan</a></li>
+<li><a href="../followups.html">Open questions</a></li>
+</ul>
+<h2>Evidence</h2>
+<ul>
+<li><a href="../evidence/index.html">What was measured</a></li>
+<li><a href="../evidence/corpus-baseline.html">Corpus baseline</a></li>
+<li><a href="../evidence/mechanism-benchmarks.html" class="current">Mechanism benchmarks</a></li>
+<li><a href="../evidence/subagent-failure-taxonomy.html">Subagent failure taxonomy</a></li>
+<li><a href="../evidence/prior-art-review.html">Prior art review</a></li>
+</ul>
+</nav>
+<main>
+<h1 id="mechanism-benchmarks">Mechanism benchmarks</h1>
+<p>Three claims in the coordination spec tested against real data, 2026-08-03.</p>
+<h2 id="1-cas-base-hash-vs-bare-clock-confirmed-modest">1. CAS base-hash vs bare clock — CONFIRMED, modest</h2>
+<p>Method: the git history of a large private GitOps monorepo (<code>infra-gitops</code> below), 3,233 file-changing commits spanning 788 days. For 400 sampled windows per size, an agent scope of 6 files was drawn from the files touched in the preceding 7 days. Clock invalidation = any commit in the window touched a scoped file. CAS invalidation = <code>git diff</code> between window endpoints over the scoped files is non-empty.</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>window</th>
+<th>trials</th>
+<th>clock invalidations</th>
+<th>CAS invalidations</th>
+<th>false</th>
+<th>reduction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1h</td>
+<td>351</td>
+<td>94</td>
+<td>86</td>
+<td>8</td>
+<td>8.5%</td>
+</tr>
+<tr>
+<td>4h</td>
+<td>359</td>
+<td>122</td>
+<td>102</td>
+<td>20</td>
+<td>16.4%</td>
+</tr>
+<tr>
+<td>24h</td>
+<td>389</td>
+<td>222</td>
+<td>190</td>
+<td>32</td>
+<td>14.4%</td>
+</tr>
+<tr>
+<td>7d</td>
+<td>400</td>
+<td>334</td>
+<td>299</td>
+<td>35</td>
+<td>10.5%</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>8.5–16.4% of clock-triggered invalidations are false</strong> — the file was touched and reverted, or changed and changed back. The mechanism is real and worth keeping, but it is a refinement, not a transformation. It also does not address the larger category of <em>semantically irrelevant</em> changes, which are content changes that do not affect the agent's conclusion.</p>
+<h2 id="2-staleness-risk-by-agent-lifetime-the-more-useful-output">2. Staleness risk by agent lifetime — the more useful output</h2>
+<p>The same measurement, read as a risk curve rather than a comparison:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>agent lifetime</th>
+<th>P(premises genuinely changed)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 hour</td>
+<td>24.5%</td>
+</tr>
+<tr>
+<td>4 hours</td>
+<td>28.4%</td>
+</tr>
+<tr>
+<td>24 hours</td>
+<td>48.8%</td>
+</tr>
+<tr>
+<td>7 days</td>
+<td><strong>74.8%</strong></td>
+</tr>
+</tbody>
+</table></div>
+<p>A seven-day agent has roughly a three-in-four chance its premises moved. This is the quantitative argument for bounding agent lifetime, and it is stronger than any argument for detecting staleness after the fact.</p>
+<h2 id="3-semantic-key-derivation-on-k8s-contradicts-the-specs-generalization">3. Semantic key derivation on K8s — CONTRADICTS the spec's generalization</h2>
+<p>863 K8s objects with <code>kind</code> + <code>name</code> across two repositories.</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>identity space</th>
+<th>distinct</th>
+<th>collision</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>filenames</td>
+<td>352</td>
+<td>59.2%</td>
+</tr>
+<tr>
+<td><code>kind/name</code></td>
+<td>797</td>
+<td><strong>7.6%</strong></td>
+</tr>
+<tr>
+<td>vocabulary-stripped</td>
+<td>784</td>
+<td><strong>9.2%</strong></td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Stripping made it worse.</strong> <code>ServiceAccount/search-workflows</code> → <code>ServiceAccount/workflows</code> merged distinct objects. Most residual <code>kind/name</code> collisions are the same object defined per environment (<code>Role/default</code> ×5), which is legitimate rather than a conflict.</p>
+<p>Derivation has now helped in exactly <strong>one of four namespaces tested</strong>:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>namespace</th>
+<th>derivation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Go exported symbols</td>
+<td>not needed — 0.0% collision</td>
+</tr>
+<tr>
+<td>TypeScript exports</td>
+<td>not needed — 0.0% collision</td>
+</tr>
+<tr>
+<td>K8s <code>kind/name</code></td>
+<td><strong>harmful</strong> — 7.6% → 9.2%</td>
+</tr>
+<tr>
+<td>SQL detection views</td>
+<td><strong>helps</strong> — 11.7% → 4.4%</td>
+</tr>
+</tbody>
+</table></div>
+<p>§8.6 currently implies derivation is generally required wherever nothing enforces semantic uniqueness. That is too broad. Derivation helps only in the narrow case where <strong>the same logical thing is deliberately implemented once per vendor</strong> — detection rules across azure/entra/duo/sysmon. Elsewhere the declared identifier is the key and should be left alone.</p>
+<p><em>Measurement caveat:</em> the K8s extraction took the first <code>name:</code> within four spaces of indentation, which can capture container names, and it omitted <code>namespace</code>. The spec's own identity for K8s is <code>kind/namespace/name</code>, so the 7.6% figure is an upper bound on true collision.</p>
+<h2 id="4-relay-threshold-sizing-argues-against-building-push-at-all">4. Relay threshold sizing — argues against building push at all</h2>
+<p>Combining the risk curve (§2) with the measured lifetime distribution (<code>2026-08-03-corpus-baseline.md</code>, n=2,674):</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>cohort</th>
+<th>agents</th>
+<th>share</th>
+<th>P(stale)</th>
+<th>expected stale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>&lt;10m</td>
+<td>952</td>
+<td>35.6%</td>
+<td>10.0%</td>
+<td>95</td>
+</tr>
+<tr>
+<td>10–60m</td>
+<td>1,200</td>
+<td>44.9%</td>
+<td>22.2%</td>
+<td>267</td>
+</tr>
+<tr>
+<td>1–4h</td>
+<td>483</td>
+<td>18.1%</td>
+<td>26.4%</td>
+<td>128</td>
+</tr>
+<tr>
+<td>4–24h</td>
+<td>22</td>
+<td>0.8%</td>
+<td>36.6%</td>
+<td>8</td>
+</tr>
+<tr>
+<td>&gt;24h</td>
+<td>17</td>
+<td>0.6%</td>
+<td>59.5%</td>
+<td>10</td>
+</tr>
+<tr>
+<td><strong>total</strong></td>
+<td><strong>2,674</strong></td>
+<td></td>
+<td></td>
+<td><strong>508 — 19.0%</strong></td>
+</tr>
+</tbody>
+</table></div>
+<p>Relay threshold trade-off:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>relay if lifetime &gt;</th>
+<th>agents relayed</th>
+<th>% of fleet</th>
+<th>stale caught</th>
+<th>precision</th>
+<th>recall</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>10m</td>
+<td>1,722</td>
+<td>64.4%</td>
+<td>413</td>
+<td>24.0%</td>
+<td>81.3%</td>
+</tr>
+<tr>
+<td>1h</td>
+<td>522</td>
+<td>19.5%</td>
+<td>146</td>
+<td>28.0%</td>
+<td>28.7%</td>
+</tr>
+<tr>
+<td>4h</td>
+<td>39</td>
+<td>1.5%</td>
+<td>18</td>
+<td>46.6%</td>
+<td>3.6%</td>
+</tr>
+<tr>
+<td>24h</td>
+<td>17</td>
+<td>0.6%</td>
+<td>10</td>
+<td>59.5%</td>
+<td>2.0%</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>No threshold is good.</strong> Precision never exceeds 60%. Catching most staleness (81% recall at a 10-minute threshold) requires relaying to 64% of the fleet at 24% precision — three wasted relays for every useful one, each spending tokens in an agent's context.</p>
+<p><strong>And the pull path already catches 100% of it for free.</strong> §5.1 validates every returning agent with an indexed query and zero tokens. Push does not improve detection at all; its only value is letting an agent <em>abort early</em> and save its remaining work.</p>
+<p>That value is small where staleness is likeliest. The &gt;24h cohort — the highest-risk group at 59.5% — averages 208 tool calls and 331k tokens, <em>fewer</em> than the 1–4h cohort. Those agents are outstanding across suspensions, not working. Aborting one early saves little, because little remains to be done.</p>
+<p><strong>Recommendation: do not build §5.2 push relay in the first implementation.</strong> Ship pull-only validation, which is complete, free, and has no delivery hole (the probe showed queued relays are silently lost when an agent stops before its next tool round). Revisit push only if measurement shows agents doing substantial work <em>after</em> their premises break.</p>
+<footer class="site">
+  loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
+  &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/evidence/mechanism-benchmarks.md">edit this page</a>
+</footer>
+</main>
+</div>
+</body>
+</html>

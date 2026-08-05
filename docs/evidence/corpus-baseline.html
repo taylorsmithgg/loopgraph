@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corpus baseline · loopgraph</title>
+<meta name="description" content="Agent session lifetimes and artifact-name collision rates across a real corpus.">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="masthead"><div class="inner">
+  <a class="name" href="../index.html">loopgraph</a>
+  <span class="tag">Deterministic goal-state substrate for agent loops</span>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/taylorsmithgg/loopgraph">GitHub</a>
+</div></header>
+<div class="wrap">
+<nav class="side">
+<ul>
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<h2>Guide</h2>
+<ul>
+<li><a href="../cli.html">CLI &amp; exit codes</a></li>
+<li><a href="../gates.html">Gates</a></li>
+<li><a href="../memory.html">Memory</a></li>
+<li><a href="../audit.html">Audit &amp; routing</a></li>
+</ul>
+<h2>Background</h2>
+<ul>
+<li><a href="../design.html">Design</a></li>
+<li><a href="../coordination.html">Coordination design</a></li>
+<li><a href="../implementation-plan.html">Implementation plan</a></li>
+<li><a href="../followups.html">Open questions</a></li>
+</ul>
+<h2>Evidence</h2>
+<ul>
+<li><a href="../evidence/index.html">What was measured</a></li>
+<li><a href="../evidence/corpus-baseline.html" class="current">Corpus baseline</a></li>
+<li><a href="../evidence/mechanism-benchmarks.html">Mechanism benchmarks</a></li>
+<li><a href="../evidence/subagent-failure-taxonomy.html">Subagent failure taxonomy</a></li>
+<li><a href="../evidence/prior-art-review.html">Prior art review</a></li>
+</ul>
+</nav>
+<main>
+<h1 id="corpus-baseline-agent-population-2026-08-03">Corpus baseline — agent population, 2026-08-03</h1>
+<p><strong>This is a baseline, not a result.</strong> The coordination mechanisms in <code>2026-08-03-agent-coordination-graph-design.md</code> §7–§8 are unimplemented. There is no treatment arm, so no improvement is claimed or measurable yet. This document exists so a later comparison has something honest to compare against.</p>
+<h2 id="corpus">Corpus</h2>
+<p>3,233 session transcripts, 2,092 MB, under <code>~/.claude/projects</code>. 45 sessions used subagents. <strong>2,674 agent completions</strong> with full accounting.</p>
+<p>Totals: <strong>143.2 agent-days</strong> of wall clock, <strong>691.5M subagent tokens</strong>, median 192,767 tokens per agent.</p>
+<h2 id="lifetime-and-cost-distribution">Lifetime and cost distribution</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>cohort</th>
+<th>agents</th>
+<th>% agents</th>
+<th>agent-days</th>
+<th>% time</th>
+<th>tokens</th>
+<th>% tokens</th>
+<th>tok/agent</th>
+<th>tools/agent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>&lt;10m</td>
+<td>952</td>
+<td>35.6%</td>
+<td>3.4</td>
+<td>2.4%</td>
+<td>120.8M</td>
+<td>17.5%</td>
+<td>126,858</td>
+<td>32</td>
+</tr>
+<tr>
+<td>10–60m</td>
+<td>1,200</td>
+<td>44.9%</td>
+<td>22.1</td>
+<td>15.5%</td>
+<td>352.3M</td>
+<td>50.9%</td>
+<td>293,583</td>
+<td>115</td>
+</tr>
+<tr>
+<td>1–4h</td>
+<td>483</td>
+<td>18.1%</td>
+<td>32.5</td>
+<td>22.7%</td>
+<td>205.0M</td>
+<td>29.6%</td>
+<td>424,417</td>
+<td>296</td>
+</tr>
+<tr>
+<td>4–24h</td>
+<td>22</td>
+<td>0.8%</td>
+<td>9.9</td>
+<td>6.9%</td>
+<td>7.8M</td>
+<td>1.1%</td>
+<td>355,789</td>
+<td>246</td>
+</tr>
+<tr>
+<td>&gt;24h</td>
+<td>17</td>
+<td>0.6%</td>
+<td>75.3</td>
+<td>52.6%</td>
+<td>5.6M</td>
+<td>0.8%</td>
+<td>331,546</td>
+<td>208</td>
+</tr>
+</tbody>
+</table></div>
+<p>Median lifetime 16.9 min; p75 44.9 min; p90 88.6 min; p99 11.87 h; max <strong>9.61 days</strong> — which reproduces that session's 9d 14h outlier exactly, confirming the corpus captures it.</p>
+<h2 id="the-finding-that-changes-the-designs-justification">The finding that changes the design's justification</h2>
+<p><strong>17 agents (0.6%) hold 52.6% of all wall-clock and 0.8% of tokens.</strong></p>
+<p>They average <em>fewer</em> tool calls than the 1–4h cohort (208 vs 296) and similar token spend per agent (331k vs 424k). They are not computing for days — they are <strong>outstanding</strong> for days across session suspensions while doing roughly an hour's work.</p>
+<p>Consequences:</p>
+<ol>
+<li><strong>Culling long agents is not a cost saving.</strong> Eliminating every agent over 24 h would recover 0.8% of token spend. Any justification of §7 culling on efficiency grounds is refuted by this table.</li>
+<li><strong>The prize is correctness.</strong> The value of staleness detection is preventing an agent from acting on a ten-day-old world model — as happened when a 9.6-day agent returned a retirement plan for work completed seven days earlier. That is a correctness argument, not an economic one.</li>
+<li><strong>Token mass is elsewhere.</strong> 50.9% of spend sits in the 10–60 min cohort, whose lifetimes are short enough that staleness rarely bites. Mechanisms aimed at long agents will not move total spend.</li>
+<li><strong>Wall-clock and token cost are nearly uncorrelated</strong> across cohorts. Optimising one does not optimise the other, and they need separate justification.</li>
+</ol>
+<h2 id="secondary-observations">Secondary observations</h2>
+<ul>
+<li><strong>25 agents (0.9%) completed with zero tool calls</strong>, consuming 0.7M tokens. This is the <code>tool_uses == 0</code> no-work signal, now quantified at population scale.</li>
+<li>Model split across 1,403 dispatches sampled at one directory level: sonnet 679, inherited 474, opus 144, haiku 104.</li>
+<li>Peak observed concurrency is 7 simultaneous agents in one session; most sessions peak at 1.</li>
+</ul>
+<h2 id="method-corrections">Method corrections</h2>
+<p>Two errors were made and corrected while producing this table. Both are recorded because they changed the answer materially.</p>
+<ol>
+<li><strong>Worktree contamination.</strong> The first artifact-name measurement walked a large private monorepo including <code>.claude/worktrees/agent-*</code>, which are full repository copies per agent. That inflated the tree from 4,214 files to 94,479 and produced collision groups of ~5,000 files. Excluding them changed the basename collision rate from 92% to 40.7%.</li>
+<li><strong>Wrong lifetime source.</strong> Pairing each <code>Agent</code> tool_use to its <code>tool_result</code> by <code>tool_use_id</code> measures time-to-acknowledge-backgrounding, not agent lifetime — a backgrounded agent returns a result immediately and completes later via a separate notification. That method reported median 1.0 min and <strong>max 43 min</strong>, with zero agents over an hour. Reading <code>&lt;duration_ms&gt;</code> from <code>task-notification</code> records instead gives median 16.9 min and max 9.61 days. A survivorship-bias hypothesis was also tested and rejected: 99.9% of dispatches did return.</li>
+</ol>
+<h2 id="what-a-conclusive-test-would-require">What a conclusive test would require</h2>
+<p>An A/B with the mechanisms live: the same task set run with and without scope claims, OCC staleness validation, conflict-class partitioning and relay. Metrics: duplicate artifacts shipped, collisions requiring rebase, agents acting on invalidated premises, and cost per accepted change.</p>
+<p>Not runnable today. The nearest available substitute is a backtest of the conflict-class partition against recorded collisions with known ground truth (!506 vs !510 on <code>sql/57</code>; !535/!539/!543 sharing three files), which requires reconstructing per-agent write-sets. <strong>Subagent tool calls are not present in these transcripts</strong> — <code>isSidechain</code> records number zero — so write-sets cannot currently be reconstructed from history. Capturing them is a prerequisite for that backtest.</p>
+<footer class="site">
+  loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
+  &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/evidence/corpus-baseline.md">edit this page</a>
+</footer>
+</main>
+</div>
+</body>
+</html>

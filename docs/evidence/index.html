@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What was measured · loopgraph</title>
+<meta name="description" content="The measurements behind the design, including the ones that came out against it.">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="masthead"><div class="inner">
+  <a class="name" href="../index.html">loopgraph</a>
+  <span class="tag">Deterministic goal-state substrate for agent loops</span>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/taylorsmithgg/loopgraph">GitHub</a>
+</div></header>
+<div class="wrap">
+<nav class="side">
+<ul>
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<h2>Guide</h2>
+<ul>
+<li><a href="../cli.html">CLI &amp; exit codes</a></li>
+<li><a href="../gates.html">Gates</a></li>
+<li><a href="../memory.html">Memory</a></li>
+<li><a href="../audit.html">Audit &amp; routing</a></li>
+</ul>
+<h2>Background</h2>
+<ul>
+<li><a href="../design.html">Design</a></li>
+<li><a href="../coordination.html">Coordination design</a></li>
+<li><a href="../implementation-plan.html">Implementation plan</a></li>
+<li><a href="../followups.html">Open questions</a></li>
+</ul>
+<h2>Evidence</h2>
+<ul>
+<li><a href="../evidence/index.html" class="current">What was measured</a></li>
+<li><a href="../evidence/corpus-baseline.html">Corpus baseline</a></li>
+<li><a href="../evidence/mechanism-benchmarks.html">Mechanism benchmarks</a></li>
+<li><a href="../evidence/subagent-failure-taxonomy.html">Subagent failure taxonomy</a></li>
+<li><a href="../evidence/prior-art-review.html">Prior art review</a></li>
+</ul>
+</nav>
+<main>
+<h1 id="what-was-measured">What was measured</h1>
+<p>Four measurement passes, run before the mechanisms they justify were built.
+They are published as they were written, including the parts that argued
+against the design.</p>
+<p>Two conventions hold throughout. Numbers come from a real corpus of long
+agent sessions and a large private GitOps monorepo — names of employers,
+clients and clusters are replaced with placeholders, the measurements are
+not. And a result that contradicted the plan is reported rather than
+retired: the coordination design's own benchmark found symbol-stripping
+<em>harmful</em>, and it says so.</p>
+<div class="cards">
+  <a class="card" href="corpus-baseline.html"><b>Corpus baseline</b><span>Agent session lifetimes and artifact-name collision rates, plus the worktree contamination that inflated the first attempt.</span></a>
+  <a class="card" href="mechanism-benchmarks.html"><b>Mechanism benchmarks</b><span>Clock versus content-addressed invalidation over 788 days of commit history, and where identifier normalization backfires.</span></a>
+  <a class="card" href="subagent-failure-taxonomy.html"><b>Subagent failure taxonomy</b><span>One long session, classified: stale premises, duplicated artifacts, and traps rediscovered three times in a day.</span></a>
+  <a class="card" href="prior-art-review.html"><b>Prior art review</b><span>What the surveyed memory and coordination systems each require, and what was already present in the graph.</span></a>
+</div>
+
+<p>The single most consequential finding is the cheapest to state: an agent
+that reports success is reporting on its own behaviour, not on the world.
+The <a href="subagent-failure-taxonomy.html">failure taxonomy</a> has a subagent
+finishing a 9.6-day investigation into a retirement that had already been
+completed a week earlier, in the exact convention it went on to recommend.
+Nothing was wrong with its reasoning. Its premises had simply expired, and
+nothing in the loop was positioned to notice.</p>
+<footer class="site">
+  loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
+  &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/evidence/index.md">edit this page</a>
+</footer>
+</main>
+</div>
+</body>
+</html>

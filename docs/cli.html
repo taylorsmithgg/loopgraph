@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CLI and exit codes · loopgraph</title>
+<meta name="description" content="Three separate exit-code contracts, the command surface, and the three ways to invoke the same CLI.">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="masthead"><div class="inner">
+  <a class="name" href="index.html">loopgraph</a>
+  <span class="tag">Deterministic goal-state substrate for agent loops</span>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/taylorsmithgg/loopgraph">GitHub</a>
+</div></header>
+<div class="wrap">
+<nav class="side">
+<ul>
+<li><a href="index.html">Overview</a></li>
+</ul>
+<h2>Guide</h2>
+<ul>
+<li><a href="cli.html" class="current">CLI &amp; exit codes</a></li>
+<li><a href="gates.html">Gates</a></li>
+<li><a href="memory.html">Memory</a></li>
+<li><a href="audit.html">Audit &amp; routing</a></li>
+</ul>
+<h2>Background</h2>
+<ul>
+<li><a href="design.html">Design</a></li>
+<li><a href="coordination.html">Coordination design</a></li>
+<li><a href="implementation-plan.html">Implementation plan</a></li>
+<li><a href="followups.html">Open questions</a></li>
+</ul>
+<h2>Evidence</h2>
+<ul>
+<li><a href="evidence/index.html">What was measured</a></li>
+<li><a href="evidence/corpus-baseline.html">Corpus baseline</a></li>
+<li><a href="evidence/mechanism-benchmarks.html">Mechanism benchmarks</a></li>
+<li><a href="evidence/subagent-failure-taxonomy.html">Subagent failure taxonomy</a></li>
+<li><a href="evidence/prior-art-review.html">Prior art review</a></li>
+</ul>
+</nav>
+<main>
+<h1 id="cli-and-exit-codes">CLI and exit codes</h1>
+<h2 id="exit-codes">Exit codes</h2>
+<p>The <code>loopgraph</code> CLI does <strong>not</strong> use one exit-code convention across all subcommands. There are three separate contracts, and mixing them up in a script or a hook is a real hazard:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Subcommand</th>
+<th>Exit 0</th>
+<th>Exit 1</th>
+<th>Exit 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>check</code></td>
+<td>specification met (<code>terminal_state == "success"</code>)</td>
+<td>specification not (yet) met</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>run</code></td>
+<td>specification met after this run</td>
+<td>specification not (yet) met, but every targeted criterion was at least evaluated</td>
+<td>at least one criterion <strong>could not be evaluated at all</strong> (bad evidence command, corrupt stored <code>expect</code>, ...) — this outranks the success check, so a batch with one unevaluable criterion never reports 0 even if every other criterion closed</td>
+</tr>
+<tr>
+<td><code>add</code>, <code>link</code>, <code>tick</code>, <code>spend</code></td>
+<td>the write went through — ordinary Unix "command succeeded," safe to chain with <code>&amp;&amp;</code></td>
+<td>—</td>
+<td>the write was rejected: bad <code>--expect</code> JSON/value, unknown <code>rel_type</code>, duplicate id, unknown foreign key, etc.</td>
+</tr>
+<tr>
+<td><code>next</code></td>
+<td>there is <strong>nothing</strong> workable right now</td>
+<td>there is at least one workable criterion</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<p>Three different subcommands, three different meanings for <code>0</code> — <code>check</code>/<code>run</code>'s 0 means "spec met," <code>next</code>'s 0 means the opposite of "there's work," and <code>add</code>/<code>link</code>/<code>tick</code>/<code>spend</code>'s 0 means only "the write went through." Do not assume any one of these generalizes to the others.</p>
+<h3 id="keep-working-vs-stop-and-escalate">"Keep working" vs. "stop and escalate"</h3>
+<p>The exit code alone also cannot tell a caller <em>why</em> <code>check</code>/<code>run</code> returned non-zero. A non-zero exit covers both:</p>
+<ul>
+<li><strong><code>None</code></strong> — the specification isn't met yet, but there's nothing wrong; keep working.</li>
+<li><strong>A terminal state</strong> — <code>stalled</code>, <code>exhausted</code>, <code>blocked</code>, or <code>no-op</code> — work has hit a condition it cannot get out of on its own (or, for <code>no-op</code>, there was never any work to do) and needs a human or a different strategy, not another turn.</li>
+</ul>
+<p>Both cases produce the same non-zero exit code. <strong>Any consumer that needs to distinguish "keep working" from a terminal condition — in particular anything wiring <code>check</code>'s exit code into a <code>Stop</code> hook — MUST read <code>terminal_state</code> from <code>check --json</code> (or <code>status --json</code>), not the exit code.</strong> A hook author who naively treats "non-zero" as "keep going" will spin forever on a genuinely <code>stalled</code> or <code>exhausted</code> graph; one who treats it as "stop" will bail out on ordinary in-progress work. Only <code>terminal_state</code> tells them apart:</p>
+<div class="codehilite"><pre><span></span><code><span class="gp">$ </span>loopgraph<span class="w"> </span>check<span class="w"> </span>--json<span class="w"> </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;import json,sys; print(json.load(sys.stdin)[&quot;terminal_state&quot;])&#39;</span>
+<span class="go">stalled</span>
+</code></pre></div>
+
+<p><code>terminal_state</code> is one of: <code>null</code> (keep working), <code>"success"</code>, <code>"stalled"</code>, <code>"exhausted"</code>, <code>"blocked"</code>, <code>"no-op"</code>.</p>
+<h2 id="command-surface">Command surface</h2>
+<div class="codehilite"><pre><span></span><code>loopgraph on|off [--only scope|loop]     # both gates by default
+loopgraph status                         # criteria + gate state
+loopgraph claim &lt;agent&gt; --scope &lt;path|id&gt;...   # atomic, exit 3 on conflict
+loopgraph validate &lt;agent&gt; [--changed ...]     # exit 1 if premises moved
+loopgraph release &lt;agent&gt; | sweep | touch &lt;agent&gt;
+loopgraph classes --agent NAME=a,b ...         # SERIAL vs parallel, pre-dispatch
+loopgraph artifact check &lt;name&gt;                # exit 1 if it duplicates
+loopgraph drop &lt;id&gt;                            # withdraw a criterion
+loopgraph noop --reason &quot;...&quot;                  # no checkable end-state, on the record
+loopgraph baseline                             # fence the repo&#39;s own suite as a guard
+loopgraph refuse &lt;key&gt; --reason &quot;...&quot;          # make a decision reachable
+loopgraph fact add &lt;id&gt; --text &quot;...&quot; | brief   # traps to paste into dispatch
+loopgraph frontier &lt;agent&gt;                     # what a killed agent finished
+</code></pre></div>
+
+<h2 id="invoking-it">Invoking it</h2>
+<p>Three ways, all the same CLI:</p>
+<div class="codehilite"><pre><span></span><code>loopgraph status              # PATH shim -&gt; dist/loopgraph-shim.sh in ~/.local/bin
+/loopgraph status             # slash command -&gt; dist/slash-command.md in ~/.claude/commands
+uv run --project &lt;repo&gt; loopgraph status
+</code></pre></div>
+
+<p><code>/loopgraph</code> with no arguments shows status. The database is resolved from the
+<strong>current</strong> git repo, not from wherever loopgraph is installed, so the same
+command reports different state per project.</p>
+<p>Installable copies of both live in <code>dist/</code>.</p>
+<footer class="site">
+  loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
+  &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/cli.md">edit this page</a>
+</footer>
+</main>
+</div>
+</body>
+</html>

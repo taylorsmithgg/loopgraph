@@ -1,0 +1,138 @@
+:root {
+  color-scheme: light dark;
+  --bg: #fbfaf8;      --panel: #f2efea;   --ink: #1c1a17;    --muted: #6a635a;
+  --rule: #ddd7cd;    --accent: #8a4b2a;  --accent-soft: #f0e5dc;
+  --code-bg: #f5f2ed; --mark: #b3541e;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Helvetica, Arial, sans-serif;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16151a;    --panel: #1e1d23;   --ink: #e6e2db;    --muted: #9b948a;
+    --rule: #302e37;  --accent: #d99a6c;  --accent-soft: #2a2229;
+    --code-bg: #1b1a20; --mark: #e8b98f;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--sans); font-size: 16.5px; line-height: 1.65;
+}
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:hover { text-decoration-thickness: 2px; }
+
+.masthead {
+  border-bottom: 1px solid var(--rule); background: var(--panel);
+  position: sticky; top: 0; z-index: 20;
+}
+.masthead .inner {
+  max-width: 1180px; margin: 0 auto; padding: .7rem 1.4rem;
+  display: flex; align-items: baseline; gap: .9rem; flex-wrap: wrap;
+}
+.masthead .name {
+  font-family: var(--mono); font-size: 1.05rem; font-weight: 600;
+  color: var(--ink); text-decoration: none; letter-spacing: -.02em;
+}
+.masthead .tag { color: var(--muted); font-size: .85rem; }
+.masthead .spacer { flex: 1 1 auto; }
+.masthead .gh { font-size: .85rem; }
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 1.4rem;
+        display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 2.6rem; }
+nav.side { padding: 2rem 0 4rem; align-self: start; position: sticky; top: 3.4rem;
+           max-height: calc(100vh - 4rem); overflow-y: auto; }
+nav.side h2 {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .11em;
+  color: var(--muted); margin: 1.6rem 0 .5rem; font-weight: 600;
+}
+nav.side h2:first-child { margin-top: 0; }
+nav.side ul { list-style: none; margin: 0; padding: 0; }
+nav.side li { margin: 0; }
+nav.side a {
+  display: block; padding: .26rem .55rem; margin-left: -.55rem;
+  border-radius: 5px; font-size: .9rem; color: var(--ink);
+  text-decoration: none; border-left: 2px solid transparent;
+}
+nav.side a:hover { background: var(--accent-soft); }
+nav.side a.current {
+  background: var(--accent-soft); color: var(--accent);
+  font-weight: 600; border-left-color: var(--accent);
+}
+
+main { padding: 2.4rem 0 6rem; min-width: 0; }
+main > h1:first-child { margin-top: 0; }
+h1, h2, h3, h4 { font-family: var(--serif); line-height: 1.22; letter-spacing: -.01em; }
+h1 { font-size: 2.15rem; margin: 0 0 1.2rem; }
+h2 { font-size: 1.5rem; margin: 2.6rem 0 .8rem; padding-top: .5rem; border-top: 1px solid var(--rule); }
+h3 { font-size: 1.17rem; margin: 1.9rem 0 .6rem; }
+h4 { font-size: 1rem; margin: 1.4rem 0 .4rem; font-family: var(--sans); }
+p, ul, ol { margin: 0 0 1rem; }
+li { margin: .28rem 0; }
+strong { font-weight: 650; }
+blockquote {
+  margin: 1.2rem 0; padding: .1rem 0 .1rem 1.1rem;
+  border-left: 3px solid var(--rule); color: var(--muted);
+}
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.2rem 0; }
+
+code { font-family: var(--mono); font-size: .87em; }
+p code, li code, td code, h1 code, h2 code, h3 code, h4 code {
+  background: var(--code-bg); border: 1px solid var(--rule);
+  border-radius: 4px; padding: .06em .32em;
+}
+pre {
+  background: var(--code-bg); border: 1px solid var(--rule); border-radius: 7px;
+  padding: .85rem 1rem; overflow-x: auto; margin: 0 0 1.2rem; line-height: 1.5;
+}
+pre code { background: none; border: 0; padding: 0; font-size: .845rem; }
+
+.tablewrap { overflow-x: auto; margin: 0 0 1.3rem; }
+table { border-collapse: collapse; font-size: .9rem; min-width: 100%; }
+th, td { text-align: left; vertical-align: top; padding: .5rem .8rem;
+         border-bottom: 1px solid var(--rule); }
+th { font-weight: 600; background: var(--panel); white-space: nowrap; }
+tbody tr:last-child td { border-bottom: 0; }
+
+.lede { font-size: 1.12rem; color: var(--muted); margin: -.4rem 0 1.8rem; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+         gap: .9rem; margin: 1.4rem 0 2rem; }
+.card {
+  border: 1px solid var(--rule); border-radius: 8px; padding: .9rem 1rem;
+  background: var(--panel); text-decoration: none; color: inherit; display: block;
+}
+.card:hover { border-color: var(--accent); }
+.card b { display: block; font-size: .96rem; margin-bottom: .2rem; color: var(--accent); }
+.card span { font-size: .86rem; color: var(--muted); line-height: 1.45; }
+
+footer.site {
+  border-top: 1px solid var(--rule); margin-top: 3rem; padding: 1.4rem 0 3rem;
+  color: var(--muted); font-size: .84rem;
+}
+.toc { display: none; }
+
+@media (max-width: 860px) {
+  .wrap { grid-template-columns: 1fr; gap: 0; }
+  nav.side {
+    position: static; max-height: none; padding: 1.2rem 0 .4rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  nav.side ul { display: flex; flex-wrap: wrap; gap: .25rem; }
+  nav.side a { border-left: 0; padding: .2rem .5rem; margin-left: 0; }
+  main { padding-top: 1.6rem; }
+  h1 { font-size: 1.8rem; }
+}
+
+/* pygments, tuned to both themes */
+.highlight .c, .highlight .c1, .highlight .cm, .highlight .ch { color: var(--muted); font-style: italic; }
+.highlight .k, .highlight .kd, .highlight .kn, .highlight .kr, .highlight .kt { color: var(--mark); }
+.highlight .s, .highlight .s1, .highlight .s2, .highlight .sb, .highlight .se { color: #3f7d58; }
+.highlight .nb, .highlight .bp { color: var(--accent); }
+.highlight .nf, .highlight .nc { color: var(--ink); font-weight: 600; }
+.highlight .m, .highlight .mi, .highlight .mf { color: #7a5ea8; }
+.highlight .gp { color: var(--muted); }
+@media (prefers-color-scheme: dark) {
+  .highlight .s, .highlight .s1, .highlight .s2, .highlight .sb, .highlight .se { color: #8fbf9f; }
+  .highlight .m, .highlight .mi, .highlight .mf { color: #b39ddb; }
+}

@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audit and routing · loopgraph</title>
+<meta name="description" content="A second vendor auditing criteria for spec-gaming, Codex as implementer, and measuring which model earns its tokens.">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="masthead"><div class="inner">
+  <a class="name" href="index.html">loopgraph</a>
+  <span class="tag">Deterministic goal-state substrate for agent loops</span>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/taylorsmithgg/loopgraph">GitHub</a>
+</div></header>
+<div class="wrap">
+<nav class="side">
+<ul>
+<li><a href="index.html">Overview</a></li>
+</ul>
+<h2>Guide</h2>
+<ul>
+<li><a href="cli.html">CLI &amp; exit codes</a></li>
+<li><a href="gates.html">Gates</a></li>
+<li><a href="memory.html">Memory</a></li>
+<li><a href="audit.html" class="current">Audit &amp; routing</a></li>
+</ul>
+<h2>Background</h2>
+<ul>
+<li><a href="design.html">Design</a></li>
+<li><a href="coordination.html">Coordination design</a></li>
+<li><a href="implementation-plan.html">Implementation plan</a></li>
+<li><a href="followups.html">Open questions</a></li>
+</ul>
+<h2>Evidence</h2>
+<ul>
+<li><a href="evidence/index.html">What was measured</a></li>
+<li><a href="evidence/corpus-baseline.html">Corpus baseline</a></li>
+<li><a href="evidence/mechanism-benchmarks.html">Mechanism benchmarks</a></li>
+<li><a href="evidence/subagent-failure-taxonomy.html">Subagent failure taxonomy</a></li>
+<li><a href="evidence/prior-art-review.html">Prior art review</a></li>
+</ul>
+</nav>
+<main>
+<h1 id="audit-and-routing">Audit and routing</h1>
+<h2 id="spec-gaming-audit-second-vendor">Spec-gaming audit (second vendor)</h2>
+<p><strong>On by default, and non-blocking.</strong> <code>loopgraph add</code> returns in ~0.2s and
+detaches the audit; the verdict lands ~20s later and shows up in <code>status</code> as
+<code>GAMEABLE checks:</code>. <code>--audit</code> waits for it inline, <code>--no-audit</code> skips it, and
+<code>LOOPGRAPH_AUDIT=0</code> disables it.</p>
+<p><strong>Latency, measured rather than assumed.</strong> Codex startup is 2.6–4.2s, not the
+cost. Two of our own choices were:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>change</th>
+<th>effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--ignore-user-config</code> dropped the configured model, falling back to codex's default (<code>gpt-5.6-sol</code>) instead of <code>gpt-5.3-codex-spark</code></td>
+<td>2× slower</td>
+</tr>
+<tr>
+<td>reasoning effort pinned to <code>medium</code></td>
+<td>1.5× slower than <code>low</code>, same verdict</td>
+</tr>
+</tbody>
+</table></div>
+<p>Measured on one audit: low 21.8s, medium 32.8s, high 40.0s — all reaching the
+same verdict; <code>minimal</code> fails outright. The configured model is now forwarded
+explicitly and effort is pinned to <code>low</code>. What remains (~20s) is the model
+actually reasoning about the question, which is why the audit is detached
+rather than optimised further.</p>
+<p><code>loopgraph game [&lt;criterion&gt;]</code> asks Codex, read-only, whether a criterion's
+evidence command can be satisfied without achieving its intent.</p>
+<p>This is the only cross-model role the evidence supports. Ensembling models for
+detection measured <em>worse</em> (F1 0.365 → 0.333) and judges over-reject
+conformant work 35–45%, so no model gates anything here — the audit runs at
+authoring time and a human decides.</p>
+<p>Found on this repo's own test criterion:</p>
+<div class="codehilite"><pre><span></span><code>$ loopgraph game C1
+C1  GAMEABLE  &quot;grep -q done f.txt&quot; matches a substring, so &quot;undone&quot; passes
+  cheat:  printf &#39;undone\n&#39; &gt; f.txt
+  harder: grep -qx &#39;done&#39; f.txt
+</code></pre></div>
+
+<p>Exit 0 sound, 1 gameable, 2 error.</p>
+<p><strong>Policy.</strong> <code>--ignore-user-config</code> is used for startup speed and tool isolation
+(300s → 23s), which also drops <code>approval_policy</code>; without forwarding it codex
+reverts to prompting and blocks forever on a pipe. Both <code>approval_policy</code> and
+<code>sandbox_mode</code> are therefore read from <code>~/.codex/config.toml</code> and passed
+through, overridable with <code>--approval</code> and <code>--sandbox</code>.</p>
+<p><strong>The elevated sandbox is the point, not a compromise.</strong> With write access the
+auditor executes the candidate cheat and confirms it passes, so the verdict is
+<code>GAMEABLE(demonstrated)</code> with observed output rather than
+<code>GAMEABLE(asserted)</code>. That is the difference between evidence and opinion —
+the same distinction the rest of this system is built on.</p>
+<p>The cost is that the auditor can write to the tree it audits. It is told to
+work in a scratch directory and clean up, and observed doing so, but that is
+behaviour rather than a guarantee. Run it on a clean tree, or pass
+<code>--sandbox read-only</code> when that matters more than proof.</p>
+<p><strong>In the workflow.</strong> <code>loopgraph add ... --audit</code> audits at authoring time and
+exits 1 if the check is gameable. Verdicts persist, and <code>loopgraph status</code>
+reports <code>GAMEABLE checks:</code> and <code>unaudited checks:</code> — an un-audited check is one
+you do not know is gameable, surfaced the same way <code>unproven</code> is.</p>
+<p><strong>Sabotage is not a criterion problem.</strong> Audited against four real criteria,
+the verdict came back gameable on <strong>all four</strong> — including <code>uv run pytest -q</code>,
+cheated by dropping a <code>conftest.py</code> that skips every test, and three others via
+<code>PATH</code> shims. A verdict that fires on every input carries no information and
+gets silenced rather than heeded. So verdicts now carry a <code>cheat_class</code>:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>class</th>
+<th>what it means</th>
+<th>worth acting on</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>shortcut</code></td>
+<td>satisfies the letter of the check by doing less work, no tampering</td>
+<td><strong>yes</strong> — rewrite the check</td>
+</tr>
+<tr>
+<td><code>sabotage</code></td>
+<td>subverts the environment (<code>PATH</code> shim, <code>conftest.py</code>, alias)</td>
+<td>no — this defeats <em>every</em> possible check</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>status</code> lists them separately for that reason.</p>
+<p><strong>Weakness is unvalidated as a gaming predictor.</strong> That experiment was meant to
+test whether a low weakness score predicts a gameable check; with the verdict
+saturated at 100% there was no signal to correlate against. Weakness is
+justified by Bennett's argument and by what it does to the loop — it drives
+toward outcomes rather than one guessed implementation — not by evidence that
+it predicts spec-gaming. Nothing here should be read as claiming otherwise.</p>
+<h2 id="codex-as-implementer">Codex as implementer</h2>
+<div class="codehilite"><pre><span></span><code>loopgraph exec impl-1 --plan plan.md --scope util.py --sandbox workspace-write
+model=codex closed=1 tokens=26952 sandbox=workspace-write terminal_state=success
+</code></pre></div>
+
+<p>Claims the scope atomically (refusing on conflict), hands the plan and the
+acceptance criteria to <code>codex exec</code>, then re-runs the criteria itself — the
+implementer never grades its own work. The prompt forbids editing or weakening
+the criteria, so a check can only be satisfied by doing the work.</p>
+<p><strong>What the evidence actually supports — primary sources only.</strong></p>
+<p><em>Plan-then-implement is well supported.</em> <a href="https://arxiv.org/pdf/2303.06689">Self-planning code generation</a>
+reports up to <strong>25.4% relative Pass@1</strong> over direct generation and 11.9% over
+chain-of-thought. But that is <em>self</em>-planning: the same model plans, then
+implements. It argues for planning first, not for splitting roles across
+models.</p>
+<p><em>Cross-model planner/executor splitting has thin evidence.</em> The one arXiv
+study that ablates the pairing — <a href="https://arxiv.org/html/2605.29927v1">Does The Way You Plan Matter?</a>
+— finds mixed pairs beat homogeneous ones, but it is <strong>web agents, not code</strong>
+(WebArena, 158 hard tasks, N=5), uses GPT-4.1-mini / Qwen-2.5-VL / Gemini 2.5
+Flash — none of them Codex or Opus — and its best configuration puts <strong>GPT in
+the planner seat</strong>, not the executor seat. Its own stated limits are three
+backends, one benchmark, five runs.</p>
+<p><em>Nothing in the literature establishes Codex-as-implementer over
+Opus-as-implementer.</em> Claims to that effect circulate via blog and podcast
+coverage of a private benchmark; they are not primary sources and are not
+treated as evidence here. Our own measurement points the other way: Opus 5
+leads SWE-bench Pro by 14.6 points on long-horizon repo work.</p>
+<p>So the case for Codex implementing is <strong>cost, latency and parallelism, not
+demonstrated capability</strong> — and the honest way to settle it is <code>loopgraph
+route</code> on your own tasks.</p>
+<p><em>One finding does transfer and is worth testing here:</em> plan representation is
+model-specific and moves results substantially (GPT best with narrative, Qwen
+with checklists, Gemini with pseudocode). <code>loopgraph exec --plan-format
+narrative|checklist|pseudocode</code> records it, and <code>route</code> groups by it, so the
+question is measurable rather than argued.</p>
+<h2 id="which-model-for-which-task">Which model for which task</h2>
+<p>Published benchmarks will not answer this for your workload — Opus 5 and
+GPT-5.6 Sol sit within a point of each other on SWE-bench Verified and tie on
+Terminal-Bench. What answers it is measurement on your own tasks, and criteria
+make that free: the same task scored by the same deterministic checks, with no
+judge and no human grading.</p>
+<p><code>--model</code> is a <strong>label</strong>, not a router. It records who you say did the work so
+the table can be grouped; it does not dispatch anywhere or select a model.</p>
+<div class="codehilite"><pre><span></span><code>loopgraph claim a1 --scope ... --model opus  --kind implement
+loopgraph release a1 --spend 900
+loopgraph route
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code>kind          model          agents closes   rate     spend  cost/accepted
+implement     codex               1      1    1.0       400            400
+implement     opus                1      3    3.0       900            300
+plan          codex               1      0    0.0      5000              -
+</code></pre></div>
+
+<p><code>cost/accepted</code> is tokens per criterion that actually closed — the metric the
+loop-engineering paper proposes and notes is almost never measured. A <code>-</code> means
+the agent spent and landed nothing, which is the number worth seeing.</p>
+<p><strong>What attribution is and is not.</strong> A close is counted when a criterion inside
+that agent's scope transitions to closed during its run, derived from the delta
+log. That is correlation, not proof of causation — a criterion can close for an
+unrelated reason. It is measured rather than self-reported, which is the whole
+point, but do not read a single row as a verdict. Accumulate rows before
+routing anything on them.</p>
+<footer class="site">
+  loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
+  &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/audit.md">edit this page</a>
+</footer>
+</main>
+</div>
+</body>
+</html>
