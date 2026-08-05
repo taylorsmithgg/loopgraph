@@ -45,7 +45,8 @@
 <main>
 <h1 id="cli-and-exit-codes">CLI and exit codes</h1>
 <h2 id="exit-codes">Exit codes</h2>
-<p>The <code>loopgraph</code> CLI does <strong>not</strong> use one exit-code convention across all subcommands. There are three separate contracts, and mixing them up in a script or a hook is a real hazard:</p>
+<p>There is no single exit-code convention across these subcommands. There are
+three, and confusing them in a script or a hook is a real hazard.</p>
 <div class="tablewrap"><table>
 <thead>
 <tr>
@@ -65,14 +66,14 @@
 <tr>
 <td><code>run</code></td>
 <td>specification met after this run</td>
-<td>specification not (yet) met, but every targeted criterion was at least evaluated</td>
-<td>at least one criterion <strong>could not be evaluated at all</strong> (bad evidence command, corrupt stored <code>expect</code>, ...) — this outranks the success check, so a batch with one unevaluable criterion never reports 0 even if every other criterion closed</td>
+<td>not met yet, but every targeted criterion was at least evaluated</td>
+<td>at least one criterion <strong>could not be evaluated at all</strong></td>
 </tr>
 <tr>
 <td><code>add</code>, <code>link</code>, <code>tick</code>, <code>spend</code></td>
-<td>the write went through — ordinary Unix "command succeeded," safe to chain with <code>&amp;&amp;</code></td>
+<td>the write went through</td>
 <td>—</td>
-<td>the write was rejected: bad <code>--expect</code> JSON/value, unknown <code>rel_type</code>, duplicate id, unknown foreign key, etc.</td>
+<td>the write was rejected</td>
 </tr>
 <tr>
 <td><code>next</code></td>
@@ -82,19 +83,41 @@
 </tr>
 </tbody>
 </table></div>
-<p>Three different subcommands, three different meanings for <code>0</code> — <code>check</code>/<code>run</code>'s 0 means "spec met," <code>next</code>'s 0 means the opposite of "there's work," and <code>add</code>/<code>link</code>/<code>tick</code>/<code>spend</code>'s 0 means only "the write went through." Do not assume any one of these generalizes to the others.</p>
-<h3 id="keep-working-vs-stop-and-escalate">"Keep working" vs. "stop and escalate"</h3>
-<p>The exit code alone also cannot tell a caller <em>why</em> <code>check</code>/<code>run</code> returned non-zero. A non-zero exit covers both:</p>
+<p>Read that table twice, because <code>0</code> means three different things in it:</p>
 <ul>
-<li><strong><code>None</code></strong> — the specification isn't met yet, but there's nothing wrong; keep working.</li>
-<li><strong>A terminal state</strong> — <code>stalled</code>, <code>exhausted</code>, <code>blocked</code>, or <code>no-op</code> — work has hit a condition it cannot get out of on its own (or, for <code>no-op</code>, there was never any work to do) and needs a human or a different strategy, not another turn.</li>
+<li>for <code>check</code> and <code>run</code>, <code>0</code> means "spec met"</li>
+<li>for <code>next</code>, <code>0</code> means the <em>opposite</em> of "there's work"</li>
+<li>for the write commands, <code>0</code> means only "the write went through" — ordinary
+  Unix success, safe to chain with <code>&amp;&amp;</code></li>
 </ul>
-<p>Both cases produce the same non-zero exit code. <strong>Any consumer that needs to distinguish "keep working" from a terminal condition — in particular anything wiring <code>check</code>'s exit code into a <code>Stop</code> hook — MUST read <code>terminal_state</code> from <code>check --json</code> (or <code>status --json</code>), not the exit code.</strong> A hook author who naively treats "non-zero" as "keep going" will spin forever on a genuinely <code>stalled</code> or <code>exhausted</code> graph; one who treats it as "stop" will bail out on ordinary in-progress work. Only <code>terminal_state</code> tells them apart:</p>
+<p>None of these generalises to the others.</p>
+<p>Two cells deserve their own note. <code>run</code> exit 2 covers a bad evidence command or
+a corrupt stored <code>expect</code>, and it <strong>outranks</strong> the success check: a batch
+containing one unevaluable criterion never reports 0, even if every other
+criterion closed. The write commands' exit 2 covers bad <code>--expect</code> JSON or
+value, an unknown <code>rel_type</code>, a duplicate id, an unknown foreign key.</p>
+<h2 id="keep-working-vs-stop-and-escalate">"Keep working" vs. "stop and escalate"</h2>
+<p>An exit code cannot tell you <em>why</em> <code>check</code> or <code>run</code> came back non-zero. Two
+very different situations share the same code:</p>
+<ul>
+<li><strong><code>None</code></strong> — the specification isn't met yet, but nothing is wrong. Keep
+  working.</li>
+<li><strong>A terminal state</strong> — <code>stalled</code>, <code>exhausted</code>, <code>blocked</code> or <code>no-op</code>. The work
+  has hit something it cannot get out of on its own, and needs a human or a
+  different strategy rather than another turn. (<code>no-op</code> means there was never
+  any work to do.)</li>
+</ul>
+<p>So: <strong>anything wiring <code>check</code> into a <code>Stop</code> hook must read <code>terminal_state</code>
+from <code>check --json</code> or <code>status --json</code>, not the exit code.</strong></p>
+<p>Treat non-zero as "keep going" and you spin forever on a genuinely <code>stalled</code>
+graph. Treat it as "stop" and you bail out of ordinary in-progress work. Only
+<code>terminal_state</code> tells them apart:</p>
 <div class="codehilite"><pre><span></span><code><span class="gp">$ </span>loopgraph<span class="w"> </span>check<span class="w"> </span>--json<span class="w"> </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;import json,sys; print(json.load(sys.stdin)[&quot;terminal_state&quot;])&#39;</span>
 <span class="go">stalled</span>
 </code></pre></div>
 
-<p><code>terminal_state</code> is one of: <code>null</code> (keep working), <code>"success"</code>, <code>"stalled"</code>, <code>"exhausted"</code>, <code>"blocked"</code>, <code>"no-op"</code>.</p>
+<p>Its values are <code>null</code> (keep working), <code>"success"</code>, <code>"stalled"</code>, <code>"exhausted"</code>,
+<code>"blocked"</code> and <code>"no-op"</code>.</p>
 <h2 id="command-surface">Command surface</h2>
 <div class="codehilite"><pre><span></span><code>loopgraph on|off [--only scope|loop]     # both gates by default
 loopgraph status                         # criteria + gate state
@@ -118,10 +141,11 @@ loopgraph frontier &lt;agent&gt;                     # what a killed agent finis
 uv run --project &lt;repo&gt; loopgraph status
 </code></pre></div>
 
-<p><code>/loopgraph</code> with no arguments shows status. The database is resolved from the
-<strong>current</strong> git repo, not from wherever loopgraph is installed, so the same
-command reports different state per project.</p>
-<p>Installable copies of both live in <code>dist/</code>.</p>
+<p><code>/loopgraph</code> with no arguments shows status.</p>
+<p>The database is resolved from the <strong>current</strong> git repo, not from wherever
+loopgraph is installed — so the same command reports different state per
+project. Installable copies of the shim and the slash command both live in
+<code>dist/</code>.</p>
 <footer class="site">
   loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
   &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/cli.md">edit this page</a>

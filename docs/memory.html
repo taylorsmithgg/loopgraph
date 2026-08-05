@@ -45,43 +45,47 @@
 <main>
 <h1 id="memory">Memory</h1>
 <p><code>loopgraph mem</code> (or the <code>mem</code> shim) is memory on the same graph: <code>retain</code>,
-<code>recall</code>, <code>supersede</code>, <code>history</code>, <code>forget</code>, <code>import</code>. It exists because the
-surveyed options — Hindsight, Supermemory, Graphiti, Mem0, LangMem — each want
-their own store beside a graph that already has typed nodes, typed edges and an
-append-only delta log with a logical clock. What was actually missing was
-retrieval.</p>
-<ul>
-<li><strong>Global, not per-repo.</strong> <code>~/.loopgraph/memory.db</code>. A trap learned in one repo
-  is worth most in a different one.</li>
-<li><strong>Three kinds</strong>, after Hindsight's pathways: <code>world</code> (how things are),
-  <code>experience</code> (what happened to us), <code>model</code> (what we concluded).</li>
-<li><strong>Recall is deterministic</strong> — BM25 over FTS5 with a recency half-life, no
-  model in the path. A model call at recall time taxes every session for a
-  lookup that ranking already does.</li>
-<li><strong>Extraction runs in the session, not a subprocess.</strong> Every surveyed system
-  calls an LLM at retain time; a nested <code>claude -p</code> here takes minutes or dies
-  on auth, and would ship memory content somewhere the conversation had not.
-  The agent holding the conversation already knows what happened.</li>
-<li><strong>Superseding keeps the old belief</strong> and links it. Deleting it would leave the
-  graph asserting we always knew the new thing.</li>
-</ul>
-<p>Recall gates on <strong>term coverage, not a BM25 floor</strong>: an absolute score floor is
-a function of corpus size, so one tuned against 75 memories silences a store
-with five — exactly when a new install gets judged.</p>
-<h4 id="recall-scope-and-your-own-terms">Recall scope, and your own terms</h4>
+<code>recall</code>, <code>supersede</code>, <code>history</code>, <code>forget</code>, <code>import</code>.</p>
+<p>It exists because of what the alternatives ask for. Hindsight, Supermemory,
+Graphiti, Mem0 and LangMem each want their own store, sitting beside a graph
+that already has typed nodes, typed edges and an append-only delta log with a
+logical clock. The store was never the missing piece. Retrieval was.</p>
+<h2 id="how-it-behaves">How it behaves</h2>
+<p><strong>Global, not per-repo.</strong> One file, <code>~/.loopgraph/memory.db</code>. A trap learned in
+one repo is worth the most in a different one.</p>
+<p><strong>Three kinds</strong>, after Hindsight's pathways: <code>world</code> (how things are),
+<code>experience</code> (what happened to us), <code>model</code> (what we concluded).</p>
+<p><strong>Recall is deterministic.</strong> BM25 over FTS5 with a recency half-life, and no
+model in the path. Recall runs at session start and on demand, so a model call
+there would tax every session for a lookup that ranking already does.</p>
+<p><strong>Extraction runs in the session, not a subprocess.</strong> Every surveyed system
+calls an LLM at retain time. A nested <code>claude -p</code> takes minutes or dies on
+auth, and it would ship memory content somewhere the conversation had not
+already been. The agent holding the conversation already knows what happened,
+so it calls <code>retain</code> itself.</p>
+<p><strong>Superseding keeps the old belief</strong> and links it to the one that replaced it.
+Delete it instead and the graph ends up asserting we always knew the new thing.</p>
+<p>One tuning note: recall gates on <strong>term coverage, not a BM25 floor</strong>. An
+absolute score floor is a function of corpus size, so a floor tuned against 75
+memories silences a store with five — which is exactly when a new install gets
+judged.</p>
+<h2 id="recall-scope">Recall scope</h2>
 <p>One store is reachable from every harness on the machine, and those harnesses
-do not all run the same vendor's model. So recall is <strong>default-deny</strong>: a memory
-classified sensitive is withheld unless <code>LOOPGRAPH_MEM_SCOPE=full</code>, and the
-withholding is <em>announced</em> — "3 withheld at scope=safe" — rather than returning
-an empty list that reads as "nothing is known."</p>
-<p>The shipped classifier only knows patterns that identify anyone's private work:
+do not all run the same vendor's model.</p>
+<p>So recall is <strong>default-deny</strong>. A memory classified sensitive is withheld unless
+<code>LOOPGRAPH_MEM_SCOPE=full</code>, and the withholding is announced — "3 withheld at
+scope=safe" — rather than returned as an empty list that reads like "nothing is
+known."</p>
+<p>The shipped classifier knows only patterns that identify anyone's private work:
 IP addresses, emails, AWS ARNs and account ids, credential material, in-cluster
-DNS, private URLs. It deliberately does <strong>not</strong> ship a list of employers,
-clients or clusters. Those differ per operator, and a list of them committed to
-a public repository is the leak it was written to prevent.</p>
-<p>Yours go in <code>~/.loopgraph/sensitive.toml</code> (override with
-<code>LOOPGRAPH_SENSITIVE_CONFIG</code>), which is read at classification time and never
-written to by loopgraph:</p>
+DNS, private URLs.</p>
+<p>What it deliberately does <strong>not</strong> ship is a list of employers, clients or
+clusters. Those differ per operator, and a list of them committed to a public
+repository is the leak it was written to prevent.</p>
+<h2 id="your-own-terms">Your own terms</h2>
+<p>Yours go in <code>~/.loopgraph/sensitive.toml</code>, which loopgraph reads at
+classification time and never writes to. Override the location with
+<code>LOOPGRAPH_SENSITIVE_CONFIG</code>.</p>
 <div class="codehilite"><pre><span></span><code><span class="c1"># Literal terms, matched case-insensitively on word boundaries.</span>
 <span class="n">terms</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;acme&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;acme-console&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;orion&quot;</span><span class="p">]</span>
 <span class="n">terms_why</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;an internal system or client name&quot;</span>
@@ -92,12 +96,15 @@ written to by loopgraph:</p>
 <span class="n">why</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;a client host or tenant code&quot;</span>
 </code></pre></div>
 
-<p>An explicit term list, not "any three capitals" — a classifier that fires on
-<code>AWS</code>, <code>SQL</code> and <code>CPU</code> marks everything, and teaches its operator to run
-<code>--scope full</code> by reflex, which is worse than having no classifier at all. A
-config that cannot be parsed prints to stderr and is skipped; it is never
-silently ignored, because a redactor that quietly stops redacting looks exactly
-like one with nothing to redact.</p>
+<p>Note that this is an explicit term list rather than a rule like "any three
+capitals." A classifier that fires on <code>AWS</code>, <code>SQL</code> and <code>CPU</code> marks everything,
+and one that marks everything teaches its operator to run <code>--scope full</code> by
+reflex. That is worse than having no classifier at all.</p>
+<p>Edit the file and the change takes effect immediately. There is no restart,
+because a term added after a leak scare should not have to wait for one.</p>
+<p>A config that cannot be parsed prints to stderr and is skipped. It is never
+silently ignored — a redactor that quietly stops redacting looks exactly like
+one with nothing to redact.</p>
 <footer class="site">
   loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
   &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/memory.md">edit this page</a>

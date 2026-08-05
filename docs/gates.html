@@ -44,77 +44,99 @@
 </nav>
 <main>
 <h1 id="gates">Gates</h1>
-<p><strong>On by default.</strong> This is safe because both gates are inert until you give
-them something: the scope gate is silent unless a dispatch prompt carries a
-<code>SCOPE:</code> line, and the loop gate is silent unless criteria are declared. A repo
-that never opted in is unaffected.</p>
-<p><code>loopgraph off</code> disables both, <code>--only scope|loop</code> disables one, and
-<code>LOOPGRAPH_COORD=0</code> / <code>LOOPGRAPH_LOOP=0</code> force them off without touching state. State lives in <code>~/.loopgraph/&lt;sha of repo root&gt;.db</code>
-— nothing is ever written into your project.</p>
-<p>A <code>PreToolUse</code> hook blocks an <code>Agent</code> dispatch whose scope is already claimed.
-Declare scope in the dispatch prompt:</p>
+<p>Two gates. One stops two agents writing the same files. The other stops a turn
+ending while the work is unfinished.</p>
+<p>Both are on once the hooks are installed, and both are <strong>inert until you give
+them something</strong>. The scope gate says nothing unless a dispatch prompt carries
+a <code>SCOPE:</code> line. The loop gate says nothing unless criteria are declared. A
+repo that never opted in behaves exactly as it did before.</p>
+<p>Every gate also fails open. If one breaks, work continues — a gate that blocks
+on its own bug is worse than no gate at all.</p>
+<div class="tablewrap"><table>
+
+<tbody>
+<tr>
+<td>Turn both off</td>
+<td><code>loopgraph off</code></td>
+</tr>
+<tr>
+<td>Turn one off</td>
+<td><code>loopgraph off --only scope</code> (or <code>loop</code>)</td>
+</tr>
+<tr>
+<td>Force off without touching state</td>
+<td><code>LOOPGRAPH_COORD=0</code>, <code>LOOPGRAPH_LOOP=0</code></td>
+</tr>
+<tr>
+<td>Where state lives</td>
+<td><code>~/.loopgraph/&lt;sha of repo root&gt;.db</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>Nothing is ever written into your project.</p>
+<h2 id="the-scope-gate">The scope gate</h2>
+<p>A <code>PreToolUse</code> hook refuses to dispatch an agent whose scope another agent
+already holds. You declare the scope in the dispatch prompt:</p>
 <div class="codehilite"><pre><span></span><code>SCOPE: charts/values.yaml sql/57 rules/registry.yaml
 </code></pre></div>
 
-<p>Undeclared scope is not blocked, non-Agent tools pass through, and a broken
-gate allows work rather than blocking it.</p>
-<h2 id="loop-gate">Loop gate</h2>
-<p>Enabled with <code>loopgraph on --only loop</code>. A <code>Stop</code> hook refuses to end
-the turn while declared criteria are unmet.</p>
-<ul>
-<li>Silent when off, or when no criteria are declared.</li>
-<li>Cheap subset each turn (only non-closed criteria), but a <strong>full sweep before
-  declaring success</strong>, so a criterion that closed earlier and broke later is
-  still caught.</li>
-<li>Cannot trap a session, and <strong>two separate limits do that job — the smaller
-  one governs</strong>:</li>
-<li><strong><code>STAGNATION_TURNS</code> (8)</strong> — R-01 fires when nothing has closed in that
-    many turns, ending the drive as <code>stalled</code>. With an unsatisfiable
-    criterion this is what stops it, at 7 blocks. Raising
-    <code>LOOPGRAPH_MAX_BLOCKS</code> alone changes nothing.</li>
-<li><strong><code>LOOPGRAPH_MAX_BLOCKS</code> (default 7)</strong> — the backstop for the other case:
-    a session that keeps closing criteria resets stagnation and could
-    otherwise drive forever.
-  Claude Code enforces its own ceiling at <code>CLAUDE_CODE_STOP_HOOK_BLOCK_CAP</code>
-  (default 8); keep loopgraph's under it, or the harness cuts the drive off
-  mid-flight with its own message instead.</li>
-<li><code>exhausted</code> / <code>stalled</code> / <code>blocked</code> allow the stop and say so — an error is
-  never reported as success.</li>
-<li><code>LOOPGRAPH_LOOP=0</code> forces it off.</li>
-</ul>
+<p>That is the whole interface. Undeclared scope is not blocked, non-Agent tools
+pass straight through, and a claim conflict exits 3 rather than merging two
+agents into the same files.</p>
+<h2 id="the-loop-gate">The loop gate</h2>
+<p>A <code>Stop</code> hook refuses to end the turn while declared criteria are unmet.</p>
+<p>It checks the cheap subset every turn — only criteria that are not yet closed.
+Before it will declare success, it runs a <strong>full sweep</strong>, so a criterion that
+closed early and broke later still gets caught.</p>
+<h3 id="it-cannot-trap-a-session">It cannot trap a session</h3>
+<p>Two separate limits guarantee that, and the smaller one governs.</p>
+<p><strong><code>STAGNATION_TURNS</code> (8)</strong> ends the drive as <code>stalled</code> when nothing has closed
+in that many turns. Give the gate an unsatisfiable criterion and this is what
+stops it, at 7 blocks. Raising <code>LOOPGRAPH_MAX_BLOCKS</code> on its own changes
+nothing.</p>
+<p><strong><code>LOOPGRAPH_MAX_BLOCKS</code> (default 7)</strong> covers the other case. A session that
+keeps closing criteria keeps resetting stagnation, and could otherwise drive
+forever.</p>
+<p>Claude Code enforces its own ceiling at <code>CLAUDE_CODE_STOP_HOOK_BLOCK_CAP</code>
+(default 8). Keep loopgraph's limit under it. Otherwise the harness cuts the
+drive off mid-flight with its own message instead of yours.</p>
+<p>A run that ends <code>exhausted</code>, <code>stalled</code> or <code>blocked</code> allows the stop and says
+which. An error is never reported as success.</p>
 <h2 id="what-makes-it-self-starting">What makes it self-starting</h2>
-<p>The gate is inert with no criteria, so "declare nothing" was always the
-cheapest way past it — and for the tool's whole life, that is what happened
-everywhere. Three deterministic pieces close that, none of them a model call:</p>
-<ul>
-<li><strong>A stated goal is recorded.</strong> <code>UserPromptSubmit</code> files the request as
-  pending and injects the contract.</li>
-<li><strong>A pending goal must be answered.</strong> The <code>Stop</code> hook refuses a turn that
-  declared nothing, twice at most, then allows the stop while saying plainly
-  that the work is <strong>UNVERIFIED, not verified</strong>. The way out is either
-  <code>loopgraph add ...</code> or <code>loopgraph noop --reason "..."</code> — a waiver is a
-  legitimate answer for a question or a lookup, it just has to be an answer.</li>
-<li><strong>The repo's own suite is fenced automatically.</strong> <code>loopgraph baseline</code>
-  detects pytest / npm / cargo / go / make, runs it, and installs it as a
-  <code>--guard</code> if it is observed green. Guards bind every session; a fence that
-  was already down is never installed, so pre-existing breakage cannot hold
-  a turn open. Runs detached, so no prompt ever waits on it.</li>
-</ul>
-<p>Criteria carry their origin: <code>status</code> prints <code>[guard]</code> and <code>[auto]</code>, and
-<code>loopgraph drop &lt;id&gt;</code> withdraws anything that misreads the request.</p>
+<p>The loop gate is inert with no criteria. So "declare nothing" was always the
+cheapest way past it, and for the tool's whole life that is exactly what
+happened, everywhere.</p>
+<p>Three deterministic pieces close that hole. None of them is a model call.</p>
+<p><strong>A stated goal is recorded.</strong> <code>UserPromptSubmit</code> files the request as pending
+and injects the contract.</p>
+<p><strong>A pending goal has to be answered.</strong> The <code>Stop</code> hook refuses a turn that
+declared nothing — twice at most, then it allows the stop while saying plainly
+that the work is UNVERIFIED rather than verified. Two answers count:
+<code>loopgraph add ...</code> declares a criterion, and <code>loopgraph noop --reason "..."</code>
+waives one. A waiver is perfectly legitimate for a question or a lookup. It
+just has to be an answer.</p>
+<p><strong>The repo's own suite gets fenced automatically.</strong> <code>loopgraph baseline</code>
+detects pytest, npm, cargo, go or make, runs it, and installs it as a
+<code>--guard</code> only if it comes back green. Guards bind every session. A fence that
+was already down is never installed, so pre-existing breakage cannot hold your
+turn open. It runs detached, so no prompt ever waits on it.</p>
+<p>Criteria carry their origin. <code>status</code> prints <code>[guard]</code> and <code>[auto]</code>, and
+<code>loopgraph drop &lt;id&gt;</code> withdraws anything that misread the request.</p>
 <h2 id="weakness-not-brevity">Weakness, not brevity</h2>
-<p><code>add</code> is an entailment gate. It runs the check immediately and <strong>refuses one
-that already passes</strong> — a check that is green before the work cannot tell done
-from not-done, and a graph full of those is what "fully specified, nothing
-happening" looks like. <code>--guard</code> is the deliberate exception (a fence is
-supposed to be green; its job is to stay that way) and <code>--allow-green</code> is the
+<p><code>add</code> runs the check immediately and <strong>refuses one that already passes</strong>.</p>
+<p>The reason is simple: a check that is green before the work cannot tell done
+from not-done. A graph full of those is what "fully specified, nothing
+happening" looks like. <code>--guard</code> is the deliberate exception, because a fence
+is supposed to be green and its job is to stay that way. <code>--allow-green</code> is the
 manual override.</p>
-<p>Among checks that do discriminate, the widest wins. Following Bennett,
+<p>Among checks that do discriminate, the widest one wins.</p>
+<p>That follows Bennett,
 <a href="https://arxiv.org/abs/2301.12987"><em>The Optimal Choice of Hypothesis Is the Weakest, Not the Shortest</em></a>
 (arXiv:2301.12987): among hypotheses that entail the observations, maximising
 extension generalises 1.1–5× better than minimising description length. A
-criterion is a hypothesis about done-ness and its extension is the set of
-world-states where its check passes, so:</p>
+criterion is a hypothesis about done-ness, and its extension is the set of
+world-states where its check passes.</p>
+<p>In practice that means:</p>
 <div class="tablewrap"><table>
 <thead>
 <tr>
@@ -141,21 +163,24 @@ world-states where its check passes, so:</p>
 </tr>
 </tbody>
 </table></div>
-<p><code>loopgraph.weakness</code> scores this structurally and <code>add</code> warns when a check is
-narrower than the goal it is standing in for. The order matters and is the
-whole idea: <strong>entailment first, weakness second.</strong> Ranking by weakness alone
-selects <code>true</code> every time. Brevity survives only as a tie-break.</p>
-<p>Auto-derivation of criteria by a model was built and dropped: it put a
-multi-second model call on every first prompt and executed generated shell
-nobody had read. <code>weakness.is_safe()</code> remains as the deny-list for any future
-derivation, and refuses <code>rm -rf</code>, <code>git push</code>, <code>sudo</code>, <code>curl | sh</code> and friends.</p>
+<p><code>loopgraph.weakness</code> scores this structurally, and <code>add</code> warns when a check is
+narrower than the goal it stands in for.</p>
+<p>The order is the whole idea: <strong>entailment first, weakness second.</strong> Rank by
+weakness alone and you select <code>true</code> every time. Brevity survives only as a
+tie-break.</p>
+<p>One thing that was built and then dropped: letting a model derive criteria. It
+put a multi-second model call on every first prompt and executed generated
+shell nobody had read. <code>weakness.is_safe()</code> survives as the deny-list for any
+future attempt, refusing <code>rm -rf</code>, <code>git push</code>, <code>sudo</code>, <code>curl | sh</code> and friends.</p>
 <h2 id="one-database-many-sessions">One database, many sessions</h2>
-<p><code>~/.loopgraph/&lt;hash&gt;.db</code> is keyed by git root, falling back to cwd — so every
-session working <strong>outside</strong> a repo shares one graph with every other. Observed
-live: three sessions in <code>$HOME</code>, one of them declaring a goal mid-work while
-the others were held open on criteria they had never heard of.</p>
-<p>A goal belongs to whoever stated it. <code>add</code> stamps the authoring session
-(<code>CLAUDE_CODE_BRIDGE_SESSION_ID</code>, override <code>LOOPGRAPH_SESSION</code>), and:</p>
+<p>The database is keyed by git root, falling back to cwd. Every session working
+<strong>outside</strong> a repo therefore shares one graph with every other session outside
+a repo.</p>
+<p>That is not hypothetical. Observed live: three sessions in <code>$HOME</code>, one of them
+declaring a goal mid-work while the other two sat held open on criteria they
+had never heard of.</p>
+<p>So a goal belongs to whoever stated it. <code>add</code> stamps the authoring session
+(<code>CLAUDE_CODE_BRIDGE_SESSION_ID</code>, override <code>LOOPGRAPH_SESSION</code>):</p>
 <div class="tablewrap"><table>
 <thead>
 <tr>
@@ -178,7 +203,7 @@ the others were held open on criteria they had never heard of.</p>
 </tr>
 <tr>
 <td><code>--guard</code></td>
-<td>everyone — a broken suite is not a private matter</td>
+<td>everyone; a broken suite is not a private matter</td>
 </tr>
 <tr>
 <td><code>--global</code></td>
@@ -186,27 +211,29 @@ the others were held open on criteria they had never heard of.</p>
 </tr>
 <tr>
 <td>anything, when no session identity is available at all</td>
-<td>everyone — a gate that quietly stops gating is the one failure never worth risking</td>
+<td>everyone; a gate that quietly stops gating is the one failure never worth risking</td>
 </tr>
 </tbody>
 </table></div>
 <p><strong>Not enforced is never unmentioned.</strong> Anything open that this session is not
-held to is listed by <code>status</code> and named by the Stop hook on its way past, with
-<code>loopgraph adopt &lt;id&gt;</code> (take it on) and <code>loopgraph drop &lt;id&gt;</code> (remove it)
-alongside it. <code>loopgraph adopt --all</code> takes on every loose one. Silence here
+held to still gets listed by <code>status</code>, and the Stop hook names it on the way
+past, alongside <code>loopgraph adopt &lt;id&gt;</code> to take it on and <code>loopgraph drop &lt;id&gt;</code>
+to remove it. <code>loopgraph adopt --all</code> takes every loose one. Staying quiet here
 would just be the original bug wearing a new hat.</p>
-<p><code>status</code> shows the whole board; <code>check</code> answers only for this session's
-specification, or a neighbour's open goal would make it report failure
-forever. <code>status</code> also prints the session identity and shouts <code>MISMATCH</code> if
-the Stop hook ever sees a different one from the CLI — that disagreement would
-otherwise disarm the gate invisibly.</p>
-<p><strong><code>stop_hook_active</code> is not a permission bit.</strong> It is <code>true</code> only while the
-harness is already continuing <em>because</em> a stop hook blocked, and <code>false</code> on
-every ordinary first stop — the exact moment a block works. The gate shipped
-reading <code>false</code> as "cannot block" and was therefore a no-op on every normal
-turn: zero blocks across 15 project databases. It is now used only to reset the
-consecutive-block count when a fresh stop chain starts.</p>
-<h2 id="hooks-installed">Hooks installed</h2>
+<p><code>status</code> shows the whole board. <code>check</code> answers only for this session's
+specification — otherwise a neighbour's open goal would make it report failure
+forever. <code>status</code> also prints the session identity and shouts <code>MISMATCH</code> if the
+Stop hook ever sees a different one from the CLI, because that disagreement
+would disarm the gate invisibly.</p>
+<h3 id="stop_hook_active-is-not-a-permission-bit"><code>stop_hook_active</code> is not a permission bit</h3>
+<p>It is <code>true</code> only while the harness is already continuing <em>because</em> a stop hook
+blocked. On every ordinary first stop it is <code>false</code> — which is the exact moment
+a block works.</p>
+<p>The gate shipped reading <code>false</code> as "cannot block", and was therefore a no-op
+on every normal turn: zero blocks across 15 project databases. It is now used
+for one thing only, resetting the consecutive-block count when a fresh stop
+chain starts.</p>
+<h2 id="the-hooks">The hooks</h2>
 <div class="tablewrap"><table>
 <thead>
 <tr>
@@ -248,10 +275,12 @@ consecutive-block count when a fresh stop chain starts.</p>
 </tr>
 </tbody>
 </table></div>
-<p>The loop gate is inert until criteria exist, so <code>spec_prompt.py</code> is what makes
-it reachable at all: it asks once, on goal-shaped prompts, and self-silences
-the moment one criterion is declared. <code>LOOPGRAPH_SPEC_PROMPT=0</code> turns it off.</p>
-<p>Every one is off by default and fails open.</p>
+<p>Installing them is opt-in: they do nothing until you wire them into your
+harness settings.</p>
+<p><code>spec_prompt.py</code> is what makes the loop gate reachable at all. The gate is
+inert until criteria exist, so this asks once, on goal-shaped prompts, and
+silences itself the moment one criterion is declared. <code>LOOPGRAPH_SPEC_PROMPT=0</code>
+turns it off.</p>
 <footer class="site">
   loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
   &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/gates.md">edit this page</a>

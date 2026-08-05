@@ -270,6 +270,10 @@ def fix_links(body: str, root: str) -> str:
 
 
 def wrap_tables(body: str) -> str:
+    # A markdown table with no header still emits a <thead> of empty cells,
+    # which renders as a stray grey bar above the first row.
+    body = re.sub(r"<thead>\s*<tr>(?:\s*<th[^>]*>\s*</th>)+\s*</tr>\s*</thead>",
+                  "", body)
     return body.replace("<table>", '<div class="tablewrap"><table>') \
                .replace("</table>", "</table></div>")
 

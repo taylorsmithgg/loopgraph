@@ -49,14 +49,15 @@ evidence, never claimed by an agent. Harness hooks read the graph and refuse to
 let a turn end while the specification is unmet.</p>
 
 <p>An agent that grades its own work will tell you it is finished. That is not
-dishonesty, it is the absence of a fact to check against — so loopgraph
-supplies one. A criterion is a statement plus a command plus an expectation.
-The command runs, the expectation holds or it does not, and the loop's exit
-condition is derived from that rather than asserted in prose.</p>
-<p>Everything here is deterministic: SQLite, subprocesses, exit codes. No model is
-in the path of any decision the gates make. The one place a second model does
-appear — <a href="audit.html">auditing a check for spec-gaming</a> — runs at authoring time,
-gates nothing, and hands its verdict to a human.</p>
+dishonesty. It is the absence of a fact to check against, so loopgraph supplies
+one.</p>
+<p>A criterion is a statement, a command and an expectation. The command runs, the
+expectation holds or it does not, and the loop's exit condition follows from
+that rather than from a sentence of prose.</p>
+<p>Everything here is deterministic: SQLite, subprocesses, exit codes. No model
+sits in the path of any decision the gates make. A second model does appear in
+one place — <a href="audit.html">auditing a check for spec-gaming</a> — and it runs at
+authoring time, gates nothing, and hands its verdict to a human.</p>
 <div class="cards">
   <a class="card" href="cli.html"><b>CLI &amp; exit codes</b><span>Three different exit-code contracts. Getting them confused in a hook is a real hazard.</span></a>
   <a class="card" href="gates.html"><b>Gates</b><span>The scope gate on dispatch, the loop gate on turn end, and the limits that stop either trapping a session.</span></a>
@@ -99,22 +100,24 @@ loopgraph changes no behaviour until a <code>SCOPE:</code> line or a criterion a
 <span class="go">exit=0</span>
 </code></pre></div>
 
-<p><code>add</code> refuses a check that already passes: one that is green before the work
-cannot tell done from not-done. Among checks that do discriminate, the widest
-one wins — see <a href="gates.html#weakness-not-brevity">weakness, not brevity</a>.</p>
+<p><code>add</code> refuses a check that already passes, because one that is green before the
+work cannot tell done from not-done. Among checks that do discriminate, the
+widest one wins — see <a href="gates.html#weakness-not-brevity">weakness, not brevity</a>.</p>
 <h2 id="what-it-is-not">What it is not</h2>
 <ul>
-<li><strong>Not a planner.</strong> It holds the definition of done; deciding how to get there
-  is the agent's job.</li>
+<li><strong>Not a planner.</strong> It holds the definition of done. How to get there is the
+  agent's job.</li>
 <li><strong>Not a judge.</strong> No model scores anything. Measured judges over-reject
-  conformant work 35–45%, which is why nothing here gates on one.</li>
+  conformant work by 35–45%, which is why nothing here gates on one.</li>
 <li><strong>Not a hosted service.</strong> One SQLite file per repository, on your machine.</li>
 </ul>
 <h2 id="hooks">Hooks</h2>
-<p>Six hooks, all off by default and all failing open — a broken gate allows work
-rather than blocking it. See <a href="gates.html">Gates</a> for what each one does and the
-<a href="design.html">design</a> for why the loop gate needs <code>spec_prompt.py</code> to be
-reachable at all.</p>
+<p>Six hooks read the graph: two on <code>UserPromptSubmit</code>, one each on <code>PreToolUse</code>,
+<code>PostToolUse</code>, <code>SessionStart</code> and <code>Stop</code>. Wiring them into your harness is
+opt-in, and every one of them fails open — a gate that blocks on its own bug is
+worse than no gate.</p>
+<p><a href="gates.html">Gates</a> covers what each hook does, and why the loop gate needs
+<code>spec_prompt.py</code> to be reachable at all.</p>
 <footer class="site">
   loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
   &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/index.md">edit this page</a>
