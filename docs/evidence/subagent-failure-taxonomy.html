@@ -5,35 +5,59 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Subagent failure taxonomy · loopgraph</title>
 <meta name="description" content="One long session classified into the failure modes the gates are aimed at.">
+<meta property="og:title" content="Subagent failure taxonomy · loopgraph">
+<meta property="og:description" content="One long session classified into the failure modes the gates are aimed at.">
+<meta property="og:type" content="website">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../assets/style.css">
+<script>
+(function () {
+  var k = 'loopgraph-theme', r = document.documentElement;
+  try { var s = localStorage.getItem(k); if (s) r.setAttribute('data-theme', s); } catch (e) {}
+  window.addEventListener('DOMContentLoaded', function () {
+    var b = document.getElementById('theme-toggle');
+    if (!b) return;
+    b.addEventListener('click', function () {
+      var dark = r.getAttribute('data-theme') === 'dark' ||
+        (!r.getAttribute('data-theme') &&
+         window.matchMedia('(prefers-color-scheme: dark)').matches);
+      var next = dark ? 'light' : 'dark';
+      r.setAttribute('data-theme', next);
+      try { localStorage.setItem(k, next); } catch (e) {}
+    });
+  });
+})();
+</script>
 </head>
 <body>
 <header class="masthead"><div class="inner">
   <a class="name" href="../index.html">loopgraph</a>
   <span class="tag">Deterministic goal-state substrate for agent loops</span>
   <span class="spacer"></span>
-  <a class="gh" href="https://github.com/taylorsmithgg/loopgraph">GitHub</a>
+  <button class="util" id="theme-toggle" type="button"
+          aria-label="Switch between light and dark">theme</button>
+  <a class="util" href="https://github.com/taylorsmithgg/loopgraph">github</a>
 </div></header>
-<div class="wrap">
-<nav class="side">
+<div class="wrap has-toc">
+<nav class="side" aria-label="Sections">
 <ul>
 <li><a href="../index.html">Overview</a></li>
 </ul>
-<h2>Guide</h2>
+<div class="eyebrow">Guide</div>
 <ul>
 <li><a href="../cli.html">CLI &amp; exit codes</a></li>
 <li><a href="../gates.html">Gates</a></li>
 <li><a href="../memory.html">Memory</a></li>
 <li><a href="../audit.html">Audit &amp; routing</a></li>
 </ul>
-<h2>Background</h2>
+<div class="eyebrow">Background</div>
 <ul>
 <li><a href="../design.html">Design</a></li>
 <li><a href="../coordination.html">Coordination design</a></li>
 <li><a href="../implementation-plan.html">Implementation plan</a></li>
 <li><a href="../followups.html">Open questions</a></li>
 </ul>
-<h2>Evidence</h2>
+<div class="eyebrow">Evidence</div>
 <ul>
 <li><a href="../evidence/index.html">What was measured</a></li>
 <li><a href="../evidence/corpus-baseline.html">Corpus baseline</a></li>
@@ -43,7 +67,7 @@
 </ul>
 </nav>
 <main>
-<h1 id="subagent-failure-taxonomy-one-long-infrastructure-session-2026-08-03">Subagent failure taxonomy — one long infrastructure session, 2026-08-03</h1>
+<h1 id="subagent-failure-taxonomy-one-long-infrastructure-session-2026-08-03">Subagent failure taxonomy — one long infrastructure session, 2026-08-03<a class="headerlink" href="#subagent-failure-taxonomy-one-long-infrastructure-session-2026-08-03" title="Permanent link">#</a></h1>
 <p>Evidence base: <code>2026-08-03-151432-this-session-is-being-continued-from-a-previous-c.txt</code>, 10,920 lines, 567 KB. Line references are to that file.</p>
 <p><strong>Population:</strong> 39 dispatch sites, 35 distinct agents with a completion record, <strong>26.5 agent-days</strong> of summed wall clock.</p>
 <div class="tablewrap"><table>
@@ -70,7 +94,7 @@
 </table></div>
 <p>The five long-runners: <code>Inventory a legacy pipeline for decom</code> 9d 14h (L3724), <code>Fix and extend event normalization</code> 3d 18h (L4519), <code>Cloud sign-in coverage</code> 3d 17h (L4119), <code>Chat and mail detections</code> 3d 17h (L3858), <code>Surface normalized events in the console</code> 3d 17h (L3907). The four clustered at ~3d 17h returned together, which suggests they were <em>outstanding</em> across a suspension rather than computing continuously. The effect is identical: their premises are days stale on return.</p>
 <hr />
-<h2 id="a-expired-conclusions-from-long-outstanding-agents">A. Expired conclusions from long-outstanding agents</h2>
+<h2 id="a-expired-conclusions-from-long-outstanding-agents">A. Expired conclusions from long-outstanding agents<a class="headerlink" href="#a-expired-conclusions-from-long-outstanding-agents" title="Permanent link">#</a></h2>
 <p><strong>Confirmed, 4 instances, all among the 5 agents that ran &gt; 24 h.</strong></p>
 <ul>
 <li><strong>L3724–3736</strong> — <code>Inventory a legacy pipeline for decom</code> ran 9.6 days. Its cluster evidence was timestamped 2026-07-24, ten days stale. The retirement it was planning <strong>had already been completed on 2026-07-27</strong>, seven days before it returned, archived at <code>archive/infrastructure/legacy-pipeline/2026-07-27/</code> using the very convention the agent recommended. Every recommendation was obsolete on arrival.</li>
@@ -84,7 +108,7 @@
 </blockquote>
 <p><strong>Mechanism:</strong> not context loss inside the agent. The agent's world model is correct at dispatch and decays while main moves. Failure occurs at <em>return</em> time.</p>
 <p><strong>What contained it:</strong> agent honesty — two of four declined to ship. That is a behaviour, not a system property, and it cannot be relied on.</p>
-<h2 id="b-duplicate-artifacts-shipped">B. Duplicate artifacts shipped</h2>
+<h2 id="b-duplicate-artifacts-shipped">B. Duplicate artifacts shipped<a class="headerlink" href="#b-duplicate-artifacts-shipped" title="Permanent link">#</a></h2>
 <p><strong>Confirmed, 1 instance.</strong></p>
 <ul>
 <li><strong>L4131–4137</strong> — !515 added <code>azure_impossible_travel</code>, <code>azure_mfa_fatigue</code>, <code>azure_risky_signin</code>, <code>azure_new_asn</code>, each a one-to-one duplicate of <code>entra_*</code> rules already shipped in <code>sql/52</code>. For the four tenants delivering <code>azure.signinlogs</code>, every sign-in would have alerted twice.</li>
@@ -92,14 +116,14 @@
 <li><strong>L4142–4173</strong> — the MR's premise was also already false: it concluded eight tenants must enable an Entra diagnostic setting, but the sign-in data was already arriving nested under <code>azure.activitylogs</code>. Shipping it would have sent eight clients on an unnecessary errand.</li>
 </ul>
 <p><strong>Caught by:</strong> the main loop reviewing the MR on return. No automated guard existed.</p>
-<h2 id="c-namespace-collisions-between-parallel-agents">C. Namespace collisions between parallel agents</h2>
+<h2 id="c-namespace-collisions-between-parallel-agents">C. Namespace collisions between parallel agents<a class="headerlink" href="#c-namespace-collisions-between-parallel-agents" title="Permanent link">#</a></h2>
 <p><strong>Confirmed, 2 instances.</strong></p>
 <ul>
 <li><strong>L2271–2280</strong> — !506 <code>sql/57_source_host_hourly.sql</code> vs !510 <code>sql/57_win_service_control.sql</code>. Different filenames, so git reported no conflict, but "duplicate numbering in a repo where file execution order is load-bearing is exactly what caused the LC_COLLATE bug and a two-day bootstrap outage." Both also edited <code>values.yaml</code>.</li>
 <li><strong>L4139–4140</strong> — !515 <code>60_azure_signin_rollup.sql</code> collides with !506 <code>60_telemetry_advisories.sql</code>.</li>
 </ul>
 <p><strong>Mechanism:</strong> nothing reserves an identifier. Two agents independently pick the same slot, and git cannot detect it because the filenames differ.</p>
-<h2 id="d-infrastructure-kills-losing-in-flight-work">D. Infrastructure kills losing in-flight work</h2>
+<h2 id="d-infrastructure-kills-losing-in-flight-work">D. Infrastructure kills losing in-flight work<a class="headerlink" href="#d-infrastructure-kills-losing-in-flight-work" title="Permanent link">#</a></h2>
 <p><strong>Confirmed, 4 distinct events.</strong></p>
 <ul>
 <li><strong>L1093–1158</strong> — nine agents killed simultaneously by the weekly API limit. "All nine agents died on the same thing: weekly API limit, resets 2pm Pacific." Relaunched from scratch at L1270–1299; nothing recorded what they had completed before dying.</li>
@@ -107,7 +131,7 @@
 <li><strong>L7015–7021</strong> — three background tasks from the previous session with <strong>no completion record</strong>: "may have been stopped… these leave no transcript marker." State unknown, marked stopped.</li>
 <li><strong>L10838–10839</strong> — !540 held because "its agent died mid-reconciliation."</li>
 </ul>
-<h2 id="e-rediscovered-facts">E. Rediscovered facts</h2>
+<h2 id="e-rediscovered-facts">E. Rediscovered facts<a class="headerlink" href="#e-rediscovered-facts" title="Permanent link">#</a></h2>
 <p><strong>Confirmed, at least 1 recurring instance.</strong></p>
 <ul>
 <li><strong>L10795–10805</strong> — <code>glab mr merge</code> printed "✓ Merged!" while <code>state</code> remained <code>opened</code> and <code>has_conflicts: True</code>. "That's the <strong>third time today</strong> that trap has mattered."</li>
@@ -115,7 +139,7 @@
 </ul>
 <p><strong>Mechanism:</strong> hard-won environmental facts live in the main loop's context and do not reach dispatched agents.</p>
 <hr />
-<h2 id="not-failures-redundancy-working">NOT failures — redundancy working</h2>
+<h2 id="not-failures-redundancy-working">NOT failures — redundancy working<a class="headerlink" href="#not-failures-redundancy-working" title="Permanent link">#</a></h2>
 <p>Recording these so the fix does not suppress them.</p>
 <ul>
 <li><strong>L2447–2448</strong> — "Three agents independently hit that failure. Two correctly declined to claim it was theirs; one fixed it. <strong>That's the system working.</strong>" Three agents encountering one pre-existing bug is not waste.</li>
@@ -124,7 +148,7 @@
 </ul>
 <p>Any mitigation that eliminates overlap entirely would also eliminate independent convergence, which this session valued.</p>
 <hr />
-<h2 id="the-mitigation-the-session-found-empirically">The mitigation the session found empirically</h2>
+<h2 id="the-mitigation-the-session-found-empirically">The mitigation the session found empirically<a class="headerlink" href="#the-mitigation-the-session-found-empirically" title="Permanent link">#</a></h2>
 <p><strong>L10830–10834</strong>, after the collisions had already happened:</p>
 <blockquote>
 <p>"One agent, not five, handling the four conflicted MRs serially — with the mechanisms from your question actually applied this time: a namespaced scratchpad, an explicit 'do not merge,' the exact write-set named per MR, and the three facts I'd otherwise have let it rediscover."</p>
@@ -162,7 +186,7 @@
 </table></div>
 <p>Missing from that list, and unaddressed by it: <strong>A</strong> (expired premises) and the reachability half of <strong>B</strong> (a sibling's refusal being invisible).</p>
 <hr />
-<h2 id="summary">Summary</h2>
+<h2 id="summary">Summary<a class="headerlink" href="#summary" title="Permanent link">#</a></h2>
 <div class="tablewrap"><table>
 <thead>
 <tr>
@@ -208,10 +232,22 @@
 <p><strong>The dominant failure is A, and its root cause is agent lifetime.</strong> No shared-state mechanism survives a nine-day snapshot — by the time such an agent returns, anything recorded at dispatch is itself stale. Bounding lifetime addresses A directly and shrinks the window for C and D. It requires no new system.</p>
 <p><strong>The loopgraph criteria model as designed addresses none of these.</strong> It gates session termination on goal completion; every failure here is an agent returning <em>too late</em> or <em>colliding</em>, not a session ending too early. The engine could express C and E as repo invariants — "no two SQL files share a number", "no rule name duplicates a shipped rule" — checked every turn, which would have caught both instances of C at introduction rather than on return. That is a real but partial fit, and it is not what the engine was built for.</p>
 <footer class="site">
-  loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
-  &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/evidence/subagent-failure-taxonomy.md">edit this page</a>
+  MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a> &middot;
+  <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/evidence/subagent-failure-taxonomy.md">edit this page</a>
 </footer>
 </main>
+<aside class="toc" aria-label="On this page"><div class="eyebrow">On this page</div>
+<ul>
+<li><a href="#a-expired-conclusions-from-long-outstanding-agents">A. Expired conclusions from long-outstanding agents</a></li>
+<li><a href="#b-duplicate-artifacts-shipped">B. Duplicate artifacts shipped</a></li>
+<li><a href="#c-namespace-collisions-between-parallel-agents">C. Namespace collisions between parallel agents</a></li>
+<li><a href="#d-infrastructure-kills-losing-in-flight-work">D. Infrastructure kills losing in-flight work</a></li>
+<li><a href="#e-rediscovered-facts">E. Rediscovered facts</a></li>
+<li><a href="#not-failures-redundancy-working">NOT failures — redundancy working</a></li>
+<li><a href="#the-mitigation-the-session-found-empirically">The mitigation the session found empirically</a></li>
+<li><a href="#summary">Summary</a></li>
+</ul>
+</aside>
 </div>
 </body>
 </html>

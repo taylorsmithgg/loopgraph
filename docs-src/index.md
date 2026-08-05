@@ -3,24 +3,79 @@ title: Overview
 description: Deterministic goal-state substrate for agent loops. Criteria live in a context graph; done is computed from evidence, never claimed by an agent.
 ---
 
-# loopgraph
+<div class="hero">
+<div class="eyebrow">Goal state, computed</div>
+<h1>loopgraph</h1>
 
-<p class="lede">Criteria live in a context graph. "Done" is computed from
-evidence, never claimed by an agent. Harness hooks read the graph and refuse to
-let a turn end while the specification is unmet.</p>
+<p class="lede">An agent will tell you it is finished. <strong>Ask the
+repository instead.</strong> Criteria live in a context graph, and a turn
+cannot end while one of them is red.</p>
 
-An agent that grades its own work will tell you it is finished. That is not
-dishonesty. It is the absence of a fact to check against, so loopgraph supplies
-one.
+<div class="ledger">
+  <div class="bar"><span class="dot"></span>loopgraph check</div>
+  <div class="row"><span class="id">C1</span>
+    <span class="verdict pass">closed</span>
+    <span class="stmt">the queue drains under restart</span></div>
+  <div class="row"><span class="id">C2</span>
+    <span class="verdict fail">failing</span>
+    <span class="stmt">no duplicate rows after replay</span></div>
+  <div class="row"><span class="id">G-pytest</span>
+    <span class="verdict pass">closed</span>
+    <span class="stmt">the repo's own suite still passes <em>[guard]</em></span></div>
+  <div class="row"><span class="id">C3</span>
+    <span class="verdict wait">unproven</span>
+    <span class="stmt">restart is idempotent under load</span></div>
+  <div class="exit">terminal_state <b>null</b> &mdash; keep working &middot; exit <b>1</b></div>
+</div>
+</div>
 
-A criterion is a statement, a command and an expectation. The command runs, the
+That table is the whole idea. Nothing in it is an opinion.
+
+An agent that grades its own work is not being dishonest when it reports
+success. It simply has no fact to check against, so loopgraph supplies one. A
+criterion is a statement, a command and an expectation: the command runs, the
 expectation holds or it does not, and the loop's exit condition follows from
 that rather than from a sentence of prose.
 
-Everything here is deterministic: SQLite, subprocesses, exit codes. No model
-sits in the path of any decision the gates make. A second model does appear in
-one place — [auditing a check for spec-gaming](audit.md) — and it runs at
-authoring time, gates nothing, and hands its verdict to a human.
+Everything here is deterministic — SQLite, subprocesses, exit codes. No model
+sits in the path of any decision the gates make. A second model appears in
+exactly one place, [auditing a check for spec-gaming](audit.md), where it runs
+at authoring time, gates nothing, and hands its verdict to a human.
+
+<figure class="loopfig">
+<svg viewBox="0 0 760 136" role="img"
+     aria-label="A turn runs, the evidence runner re-runs every check, and the stop gate either blocks the turn or lets it end.">
+  <g class="stroke" fill="none" stroke-width="1.25">
+    <rect class="fill-panel" x="1" y="34" width="132" height="46" rx="2"/>
+    <rect class="fill-panel" x="205" y="34" width="150" height="46" rx="2"/>
+    <rect class="fill-panel" x="427" y="34" width="128" height="46" rx="2"/>
+    <rect class="fill-paper" x="627" y="34" width="132" height="46" rx="2"/>
+    <path d="M133 57h60M355 57h60M555 57h60"/>
+  </g>
+  <g class="fail" fill="none" stroke-width="1.25">
+    <path d="M491 80v26H67V86" stroke-dasharray="4 4"/>
+  </g>
+  <g class="stroke" fill="none" stroke-width="1.25">
+    <path d="M187 52l8 5-8 5M409 52l8 5-8 5M609 52l8 5-8 5"/>
+  </g>
+  <g class="fail" fill="none" stroke-width="1.4">
+    <path d="M61 92l6-7 6 7"/>
+  </g>
+  <text class="label" x="20" y="54">the turn</text>
+  <text class="sub" x="20" y="70">an agent works</text>
+  <text class="label" x="224" y="54">evidence runner</text>
+  <text class="sub" x="224" y="70">every check re-run</text>
+  <text class="label" x="446" y="54">stop gate</text>
+  <text class="sub" x="446" y="70">reads the graph</text>
+  <text class="label" x="646" y="54">turn ends</text>
+  <text class="sub" x="646" y="70">spec met, or stalled</text>
+  <text class="fail-t" x="86" y="124">a red criterion sends the turn back, and names which one</text>
+  <text class="pass-t" x="583" y="28">all green</text>
+</svg>
+<figcaption>The gate sits at turn end, not at dispatch. It re-runs the checks
+itself, so what closes a criterion is the command's exit status rather than the
+agent's account of it.</figcaption>
+</figure>
 
 <div class="cards">
   <a class="card" href="cli.html"><b>CLI &amp; exit codes</b><span>Three different exit-code contracts. Getting them confused in a hook is a real hazard.</span></a>

@@ -5,35 +5,59 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Prior art review · loopgraph</title>
 <meta name="description" content="What each surveyed memory and coordination system requires, against what the graph already had.">
+<meta property="og:title" content="Prior art review · loopgraph">
+<meta property="og:description" content="What each surveyed memory and coordination system requires, against what the graph already had.">
+<meta property="og:type" content="website">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../assets/style.css">
+<script>
+(function () {
+  var k = 'loopgraph-theme', r = document.documentElement;
+  try { var s = localStorage.getItem(k); if (s) r.setAttribute('data-theme', s); } catch (e) {}
+  window.addEventListener('DOMContentLoaded', function () {
+    var b = document.getElementById('theme-toggle');
+    if (!b) return;
+    b.addEventListener('click', function () {
+      var dark = r.getAttribute('data-theme') === 'dark' ||
+        (!r.getAttribute('data-theme') &&
+         window.matchMedia('(prefers-color-scheme: dark)').matches);
+      var next = dark ? 'light' : 'dark';
+      r.setAttribute('data-theme', next);
+      try { localStorage.setItem(k, next); } catch (e) {}
+    });
+  });
+})();
+</script>
 </head>
 <body>
 <header class="masthead"><div class="inner">
   <a class="name" href="../index.html">loopgraph</a>
   <span class="tag">Deterministic goal-state substrate for agent loops</span>
   <span class="spacer"></span>
-  <a class="gh" href="https://github.com/taylorsmithgg/loopgraph">GitHub</a>
+  <button class="util" id="theme-toggle" type="button"
+          aria-label="Switch between light and dark">theme</button>
+  <a class="util" href="https://github.com/taylorsmithgg/loopgraph">github</a>
 </div></header>
-<div class="wrap">
-<nav class="side">
+<div class="wrap has-toc">
+<nav class="side" aria-label="Sections">
 <ul>
 <li><a href="../index.html">Overview</a></li>
 </ul>
-<h2>Guide</h2>
+<div class="eyebrow">Guide</div>
 <ul>
 <li><a href="../cli.html">CLI &amp; exit codes</a></li>
 <li><a href="../gates.html">Gates</a></li>
 <li><a href="../memory.html">Memory</a></li>
 <li><a href="../audit.html">Audit &amp; routing</a></li>
 </ul>
-<h2>Background</h2>
+<div class="eyebrow">Background</div>
 <ul>
 <li><a href="../design.html">Design</a></li>
 <li><a href="../coordination.html">Coordination design</a></li>
 <li><a href="../implementation-plan.html">Implementation plan</a></li>
 <li><a href="../followups.html">Open questions</a></li>
 </ul>
-<h2>Evidence</h2>
+<div class="eyebrow">Evidence</div>
 <ul>
 <li><a href="../evidence/index.html">What was measured</a></li>
 <li><a href="../evidence/corpus-baseline.html">Corpus baseline</a></li>
@@ -43,13 +67,13 @@
 </ul>
 </nav>
 <main>
-<h1 id="prior-art-review-multi-agent-write-coordination">Prior art review — multi-agent write coordination</h1>
+<h1 id="prior-art-review-multi-agent-write-coordination">Prior art review — multi-agent write coordination<a class="headerlink" href="#prior-art-review-multi-agent-write-coordination" title="Permanent link">#</a></h1>
 <p>Conducted 2026-08-03 before committing to an implementation plan.</p>
-<h2 id="headline">Headline</h2>
+<h2 id="headline">Headline<a class="headerlink" href="#headline" title="Permanent link">#</a></h2>
 <p><strong>We are not first.</strong> ATM (arXiv 2607.00041, Jun 2026) occupies almost exactly the niche of our §8 design, is more rigorously specified, and has a working Apache-2.0 implementation. It also has a scope boundary that excludes the failures we actually measured — which is the reason not to adopt it wholesale.</p>
-<h2 id="external-validation-that-the-problem-is-real">External validation that the problem is real</h2>
+<h2 id="external-validation-that-the-problem-is-real">External validation that the problem is real<a class="headerlink" href="#external-validation-that-the-problem-is-real" title="Permanent link">#</a></h2>
 <p>ATM cites the <strong>AgenticFlict</strong> dataset: <strong>142,000 AI-agent pull requests</strong>, 107,000 deterministic merge simulations, a <strong>27.67% merge-conflict rate</strong>, and 336,000 fine-grained conflict regions. That is a far stronger evidence base for the problem's existence than our own corpus, which found 17 long-running agents in 2,674 completions.</p>
-<h2 id="atm-the-closest-analog">ATM — the closest analog</h2>
+<h2 id="atm-the-closest-analog">ATM — the closest analog<a class="headerlink" href="#atm-the-closest-analog" title="Permanent link">#</a></h2>
 <p><strong>Model.</strong> A Task Contract <code>T = ⟨g, A, F, S, D, V, E, ε⟩</code>: approved intent, allowed resources, forbidden predicates, governed scope paths, required deliverables, validation commands, evidence obligations, and a direction epoch. Three planes — task contract, mutation admission, evidence closure — with a CID broker as the admission subsystem and a <strong>neutral steward</strong> as the only actor permitted to apply governed writes.</p>
 <p><strong>Mapping to our two projects:</strong></p>
 <div class="tablewrap"><table>
@@ -92,13 +116,13 @@
 </table></div>
 <p>The <code>V</code>/<code>D</code>/<code>E</code> correspondence is exact: loopgraph's criteria engine is ATM's evidence-closure plane, built independently. Our two projects together approximate ATM's three planes, minus the steward.</p>
 <p><strong>ATM's drift taxonomy</strong> distinguishes epistemic, specification, scope, evidence and <strong>state drift</strong> — the last defined as "an intent is built on a base state or read dependency that has changed," addressed by a CAS base-hash. That is our failure category A, with a more precise mechanism than ours.</p>
-<h3 id="three-mechanisms-worth-taking">Three mechanisms worth taking</h3>
+<h3 id="three-mechanisms-worth-taking">Three mechanisms worth taking<a class="headerlink" href="#three-mechanisms-worth-taking" title="Permanent link">#</a></h3>
 <ol>
 <li><strong>Neutral steward.</strong> Agents <em>propose</em> writes; a neutral party applies them. This separates "who proposes a change" from "who performs the write," and no agent ever holds write authority on a shared surface. Structurally stronger than our detect-after-the-fact approach.</li>
 <li><strong>CAS base-hash instead of a bare version counter.</strong> Our OCC query fires when <em>any</em> delta touches an entity in scope. A content hash fires only when the content actually depended upon changed — fewer false invalidations, which matters because a design that cries stale on every return trains people to ignore it.</li>
 <li><strong>Direction epoch (G2).</strong> If the goal or scope set changes, a new epoch must be issued; an agent may not silently change direction. We have no equivalent, and "the runbook's premise was already false" (!515) is a direction-drift failure.</li>
 </ol>
-<h3 id="why-not-adopt-atm-wholesale">Why not adopt ATM wholesale</h3>
+<h3 id="why-not-adopt-atm-wholesale">Why not adopt ATM wholesale<a class="headerlink" href="#why-not-adopt-atm-wholesale" title="Permanent link">#</a></h3>
 <p><strong>Wrong boundary.</strong> ATM states plainly that it "does not address cross-machine clones, remote branches, or PR-level distributed coordination" and operates "within a single controlled filesystem, worktree, or service domain." Our measured failures are precisely cross-worktree and cross-MR:</p>
 <ul>
 <li>!506 vs !510 both claiming <code>sql/57</code> — different agent worktrees, different MRs.</li>
@@ -108,11 +132,11 @@
 <p>ATM's broker would not have seen any of these. The closer analog for that boundary is CAID, which isolates agents in separate Git worktrees and reconciles afterward — which is what already happens here, and is where the cost lands.</p>
 <p><strong>Maturity.</strong> v0.9.0-alpha.1, single author, 2 stars, 1 fork. The paper's own abstract limits its claim to "feasibility within the observed single-domain settings, but not broad comparative superiority over alternative concurrency-control systems."</p>
 <p><strong>Complexity.</strong> A seven-layer admission gate, per-language adapters, atom maps, virtual atoms and two CID tiers is a large surface for a failure population of 17 agents.</p>
-<h2 id="codecrdt-the-opposite-paradigm">CodeCRDT — the opposite paradigm</h2>
+<h2 id="codecrdt-the-opposite-paradigm">CodeCRDT — the opposite paradigm<a class="headerlink" href="#codecrdt-the-opposite-paradigm" title="Permanent link">#</a></h2>
 <p>CodeCRDT (arXiv 2510.18893) does not prevent conflicts; it absorbs them. Agents hold local replicas and apply commutative, idempotent, causally-tracked operations, so concurrent edits to different regions converge without coordination. Reported <strong>2–3× speedup with 4 concurrent agents</strong>.</p>
 <p>Limits, as reported: semantic conflicts survive syntactic convergence (incompatible signatures), convergence overhead, harder debugging, degradation at high agent counts. ATM's related-work section notes CodeCRDT "reports residual semantic conflicts despite character-level convergence."</p>
 <p>This is a complementary layer, not a competitor. CRDTs solve textual convergence; none of our five failure categories is textual. <code>azure_impossible_travel</code> and <code>entra_impossible_travel</code> converge perfectly and are still a duplicate.</p>
-<h2 id="others-surveyed">Others surveyed</h2>
+<h2 id="others-surveyed">Others surveyed<a class="headerlink" href="#others-surveyed" title="Permanent link">#</a></h2>
 <ul>
 <li><strong>PatchBoard</strong> (arXiv 2605.29313) — schema-validated state mutations, logged and reversible. Our delta log with a schema check. Confirms the append-only-audit approach is conventional.</li>
 <li><strong>Blackboard architectures / Linda tuple spaces</strong> — the classical ancestor of what we called pub/sub: agents coordinate indirectly through shared structured state rather than messaging. Our graph is a blackboard; worth using the established name.</li>
@@ -120,7 +144,7 @@
 <li><strong>Merge trains / merge queues</strong> — the implemented answer to serial rebase-on-result. Already delegated in §8.3.</li>
 <li><strong>LangGraph / CrewAI / AutoGen</strong> — orchestration frameworks. LangGraph has checkpointing and explicit typed shared state; CrewAI and AutoGen have neither persistence nor checkpointing. None addresses write-set conflict or staleness of an outstanding agent's premises.</li>
 </ul>
-<h2 id="recommendation">Recommendation</h2>
+<h2 id="recommendation">Recommendation<a class="headerlink" href="#recommendation" title="Permanent link">#</a></h2>
 <ol>
 <li><strong>Do not adopt ATM.</strong> Wrong boundary for our measured failures, alpha maturity, and disproportionate complexity.</li>
 <li><strong>Take three mechanisms from it</strong>: the neutral steward, the CAS base-hash in place of a bare clock, and the direction epoch. Cite it rather than reinventing its vocabulary.</li>
@@ -129,10 +153,20 @@
 <li><strong>Do not build CRDT convergence.</strong> None of our failures is textual.</li>
 </ol>
 <footer class="site">
-  loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
-  &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/evidence/prior-art-review.md">edit this page</a>
+  MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a> &middot;
+  <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/evidence/prior-art-review.md">edit this page</a>
 </footer>
 </main>
+<aside class="toc" aria-label="On this page"><div class="eyebrow">On this page</div>
+<ul>
+<li><a href="#headline">Headline</a></li>
+<li><a href="#external-validation-that-the-problem-is-real">External validation that the problem is real</a></li>
+<li><a href="#atm-the-closest-analog">ATM — the closest analog</a></li>
+<li><a href="#codecrdt-the-opposite-paradigm">CodeCRDT — the opposite paradigm</a></li>
+<li><a href="#others-surveyed">Others surveyed</a></li>
+<li><a href="#recommendation">Recommendation</a></li>
+</ul>
+</aside>
 </div>
 </body>
 </html>

@@ -1,3 +1,22 @@
+"""The site's visual layer: palette, type, page shell.
+
+Kept apart from build_docs.py so that changing how the site looks and changing
+how it is assembled stay separate jobs.
+
+Two rules hold the design together, and both come from what loopgraph is.
+
+**Colour only ever means a verdict.** Green is a criterion that closed, red is
+one that failed, amber is one still unproven. Nothing is tinted to look nice.
+A page that spent green on a heading would be lying in the site's own
+vocabulary, so the palette leaves only cool ink and paper for everything else.
+
+**Monospace is structure, not ornament.** Headings, nav labels, criterion ids
+and exit codes are set in mono because in this subject they are all the same
+kind of thing: literal strings a machine will compare. Prose is set in a sans
+face so the difference is visible at a glance.
+"""
+
+CSS = """
 :root {
   color-scheme: light dark;
   --paper:  #f4f6f8;   --panel:  #e8ecf1;   --raise:  #ffffff;
@@ -292,3 +311,71 @@ footer.site a { color: var(--muted); }
 .highlight .gp { color: var(--faint); }
 .highlight .gi { color: var(--pass); }
 .highlight .gd { color: var(--fail); }
+"""
+
+FAVICON = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+<rect width="32" height="32" rx="5" fill="#10151c"/>
+<path d="M8 10h7a6 6 0 0 1 0 12H8z" fill="none" stroke="#5cbf85" stroke-width="2.6"/>
+<path d="M18 16l4 4 6-8" fill="none" stroke="#5cbf85" stroke-width="2.6"
+      stroke-linecap="square"/>
+</svg>
+"""
+
+THEME_SCRIPT = """
+(function () {
+  var k = 'loopgraph-theme', r = document.documentElement;
+  try { var s = localStorage.getItem(k); if (s) r.setAttribute('data-theme', s); } catch (e) {}
+  window.addEventListener('DOMContentLoaded', function () {
+    var b = document.getElementById('theme-toggle');
+    if (!b) return;
+    b.addEventListener('click', function () {
+      var dark = r.getAttribute('data-theme') === 'dark' ||
+        (!r.getAttribute('data-theme') &&
+         window.matchMedia('(prefers-color-scheme: dark)').matches);
+      var next = dark ? 'light' : 'dark';
+      r.setAttribute('data-theme', next);
+      try { localStorage.setItem(k, next); } catch (e) {}
+    });
+  });
+})();
+"""
+
+PAGE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<meta name="description" content="{description}">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{description}">
+<meta property="og:type" content="website">
+<link rel="icon" href="{root}assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="{root}assets/style.css">
+<script>{theme_script}</script>
+</head>
+<body>
+<header class="masthead"><div class="inner">
+  <a class="name" href="{root}index.html">{site}</a>
+  <span class="tag">{tagline}</span>
+  <span class="spacer"></span>
+  <button class="util" id="theme-toggle" type="button"
+          aria-label="Switch between light and dark">theme</button>
+  <a class="util" href="{repo}">github</a>
+</div></header>
+<div class="wrap{toc_class}">
+<nav class="side" aria-label="Sections">
+{nav}
+</nav>
+<main>
+{body}
+<footer class="site">
+  MIT &middot; <a href="{repo}">source</a> &middot;
+  <a href="{repo}/blob/main/docs-src/{stem}.md">edit this page</a>
+</footer>
+</main>
+{toc}
+</div>
+</body>
+</html>
+"""

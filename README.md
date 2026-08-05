@@ -1,25 +1,32 @@
 # loopgraph
 
-Deterministic goal-state substrate for agent loops. Criteria live in a context
-graph; "done" is computed from evidence, never claimed by an agent. Harness
-hooks read the graph and refuse to let a turn end while the specification is
-unmet.
+**An agent will tell you it is finished. Ask the repository instead.**
 
-**Documentation: <https://taylorsmithgg.github.io/loopgraph/>**
+Criteria live in a context graph. A criterion is a statement, a command and an
+expectation — so "done" is computed by running the command, never claimed in
+prose. A `Stop` hook reads the graph and refuses to end the turn while one of
+them is red.
 
-An agent that grades its own work will tell you it is finished. That is not
-dishonesty, it is the absence of a fact to check against — so loopgraph
-supplies one. A criterion is a statement plus a command plus an expectation.
-The command runs, the expectation holds or it does not, and the loop's exit
-condition is derived from that rather than asserted in prose.
+```
+$ loopgraph check
+C1        closed     the queue drains under restart
+C2        failing    no duplicate rows after replay
+G-pytest  closed     the repo's own suite still passes   [guard]
+C3        unproven   restart is idempotent under load
 
-Everything is deterministic: SQLite, subprocesses, exit codes. No model sits in
-the path of any decision the gates make.
+terminal_state null — keep working · exit 1
+```
+
+Nothing in that table is an opinion. An agent that grades its own work is not
+being dishonest when it reports success; it just has no fact to check against.
+This supplies one.
+
+**Documentation → <https://taylorsmithgg.github.io/loopgraph/>**
 
 ## Install
 
-Python 3.12+, no runtime dependencies. [`uv`](https://docs.astral.sh/uv/) is
-used for the venv and the console script.
+Python 3.12+, no runtime dependencies. [`uv`](https://docs.astral.sh/uv/) runs
+the venv and the console script.
 
 ```sh
 git clone https://github.com/taylorsmithgg/loopgraph ~/src/loopgraph
@@ -35,49 +42,64 @@ install -m 755 dist/loopgraph-shim.sh ~/.local/bin/loopgraph
 cp dist/slash-command.md ~/.claude/commands/loopgraph.md
 ```
 
-Nothing is written into your project: state lives in `~/.loopgraph/<sha of repo
-root>.db`. Both gates are inert until you give them something — the scope gate
-is silent without a `SCOPE:` line, the loop gate silent without criteria — so
-installing loopgraph changes no behaviour until you opt in.
+State lives in `~/.loopgraph/<sha of repo root>.db`. Nothing is written into
+your project, and both gates stay inert until you give them something — the
+scope gate is silent without a `SCOPE:` line, the loop gate silent without
+criteria.
+
+## Declaring one
 
 ```console
 $ loopgraph add C1 "the queue drains under restart" \
     --cmd 'for i in $(seq 50); do ./restart; done; [ $(in) -eq $(out) ]'
 C1 added   (unproven)
-
-$ loopgraph check; echo "exit=$?"
-C1  unproven  the queue drains under restart
-exit=1
 ```
+
+`add` runs the check immediately and **refuses one that already passes**,
+because a check that is green before the work cannot tell done from not-done.
+Among checks that do discriminate, the widest one wins — a criterion that holds
+the outcome admits every implementation that works, not just the one currently
+in mind.
 
 ## What is here
 
 | | |
 |---|---|
-| [CLI and exit codes](https://taylorsmithgg.github.io/loopgraph/cli.html) | Three separate exit-code contracts. Confusing them in a hook is a real hazard. |
-| [Gates](https://taylorsmithgg.github.io/loopgraph/gates.html) | Scope gate on dispatch, loop gate on turn end, and the two limits that stop either trapping a session. |
-| [Memory](https://taylorsmithgg.github.io/loopgraph/memory.html) | `retain` / `recall` / `supersede` on the same graph, with a default-deny recall scope you configure with your own terms. |
+| [CLI and exit codes](https://taylorsmithgg.github.io/loopgraph/cli.html) | Three separate exit-code contracts. `0` means three different things, and confusing them in a hook is a real hazard. |
+| [Gates](https://taylorsmithgg.github.io/loopgraph/gates.html) | The scope gate on dispatch, the loop gate on turn end, and the two limits that stop either trapping a session. |
+| [Memory](https://taylorsmithgg.github.io/loopgraph/memory.html) | `retain` / `recall` / `supersede` on the same graph. Deterministic BM25 retrieval, and a default-deny recall scope. |
 | [Audit and routing](https://taylorsmithgg.github.io/loopgraph/audit.html) | A second vendor asking whether a check can be satisfied without doing the work. |
 | [Design](https://taylorsmithgg.github.io/loopgraph/design.html) | The specification this was built from, including what was rejected. |
-| [Evidence](https://taylorsmithgg.github.io/loopgraph/evidence/index.html) | The measurements behind the design — including the ones that came out against it. |
+| [Evidence](https://taylorsmithgg.github.io/loopgraph/evidence/index.html) | The measurements behind it — including the ones that came out against the design. |
 
-Sources for the site are plain markdown in [`docs-src/`](docs-src); `docs/` is
-generated and committed so that what is served is what was reviewed:
+## What it is not
+
+- **Not a planner.** It holds the definition of done. How to get there is the
+  agent's job.
+- **Not a judge.** No model scores anything. Measured judges over-reject
+  conformant work by 35–45%, which is why nothing here gates on one.
+- **Not a service.** One SQLite file per repository, on your machine.
+
+## No client list ships in this repo
+
+Recall is default-deny across harnesses, and the classifier that ships knows
+only patterns identifying *anyone's* private work: IP addresses, emails, AWS
+ARNs and account ids, credential material, in-cluster DNS, private URLs.
+
+It deliberately ships no list of employers, clients or clusters. Those differ
+per operator, and a list of them committed to a public repository is the leak
+it was written to prevent. Yours live in `~/.loopgraph/sensitive.toml`, on your
+machine.
+
+## Working on it
 
 ```sh
-uv run --with markdown --with pygments python tools/build_docs.py
+uv run pytest -q                                                   # tests
+uv run --with markdown --with pygments python tools/build_docs.py  # docs site
 ```
 
-## Redaction, and why there is no client list in this repo
+Documentation sources are markdown in `docs-src/`. The rendered site in `docs/`
+is committed on purpose, so what GitHub Pages serves is what was reviewed
+locally rather than the output of a remote build nobody watched.
 
-Recall is default-deny across harnesses, and the shipped classifier only knows
-patterns that identify anyone's private work: IP addresses, emails, AWS ARNs
-and account ids, credential material, in-cluster DNS, private URLs. It
-deliberately ships no list of employers, clients or clusters — those differ per
-operator, and a list of them committed to a public repository is the leak it
-was written to prevent. Yours live in `~/.loopgraph/sensitive.toml`, on your
-machine. See [Memory](https://taylorsmithgg.github.io/loopgraph/memory.html).
-
-## License
-
-MIT. See [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).

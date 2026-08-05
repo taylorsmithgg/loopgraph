@@ -5,35 +5,59 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Open questions · loopgraph</title>
 <meta name="description" content="What is unresolved, what was measured and left alone, and the costs that turned out to matter.">
+<meta property="og:title" content="Open questions · loopgraph">
+<meta property="og:description" content="What is unresolved, what was measured and left alone, and the costs that turned out to matter.">
+<meta property="og:type" content="website">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/style.css">
+<script>
+(function () {
+  var k = 'loopgraph-theme', r = document.documentElement;
+  try { var s = localStorage.getItem(k); if (s) r.setAttribute('data-theme', s); } catch (e) {}
+  window.addEventListener('DOMContentLoaded', function () {
+    var b = document.getElementById('theme-toggle');
+    if (!b) return;
+    b.addEventListener('click', function () {
+      var dark = r.getAttribute('data-theme') === 'dark' ||
+        (!r.getAttribute('data-theme') &&
+         window.matchMedia('(prefers-color-scheme: dark)').matches);
+      var next = dark ? 'light' : 'dark';
+      r.setAttribute('data-theme', next);
+      try { localStorage.setItem(k, next); } catch (e) {}
+    });
+  });
+})();
+</script>
 </head>
 <body>
 <header class="masthead"><div class="inner">
   <a class="name" href="index.html">loopgraph</a>
   <span class="tag">Deterministic goal-state substrate for agent loops</span>
   <span class="spacer"></span>
-  <a class="gh" href="https://github.com/taylorsmithgg/loopgraph">GitHub</a>
+  <button class="util" id="theme-toggle" type="button"
+          aria-label="Switch between light and dark">theme</button>
+  <a class="util" href="https://github.com/taylorsmithgg/loopgraph">github</a>
 </div></header>
 <div class="wrap">
-<nav class="side">
+<nav class="side" aria-label="Sections">
 <ul>
 <li><a href="index.html">Overview</a></li>
 </ul>
-<h2>Guide</h2>
+<div class="eyebrow">Guide</div>
 <ul>
 <li><a href="cli.html">CLI &amp; exit codes</a></li>
 <li><a href="gates.html">Gates</a></li>
 <li><a href="memory.html">Memory</a></li>
 <li><a href="audit.html">Audit &amp; routing</a></li>
 </ul>
-<h2>Background</h2>
+<div class="eyebrow">Background</div>
 <ul>
 <li><a href="design.html">Design</a></li>
 <li><a href="coordination.html">Coordination design</a></li>
 <li><a href="implementation-plan.html">Implementation plan</a></li>
 <li><a href="followups.html" class="current">Open questions</a></li>
 </ul>
-<h2>Evidence</h2>
+<div class="eyebrow">Evidence</div>
 <ul>
 <li><a href="evidence/index.html">What was measured</a></li>
 <li><a href="evidence/corpus-baseline.html">Corpus baseline</a></li>
@@ -43,14 +67,14 @@
 </ul>
 </nav>
 <main>
-<h1 id="follow-ups">Follow-ups</h1>
+<h1 id="follow-ups">Follow-ups<a class="headerlink" href="#follow-ups" title="Permanent link">#</a></h1>
 <p>Findings raised during P0+P1 that were reviewed, judged real, and deliberately not fixed in that branch. Each carries the evidence and the ruling so a later phase does not have to rediscover it.</p>
-<h2 id="1-a-criterion-keeps-a-stale-green-verdict-when-its-latest-run-fails">1. A criterion keeps a stale green verdict when its latest run fails</h2>
+<h2 id="1-a-criterion-keeps-a-stale-green-verdict-when-its-latest-run-fails">1. A criterion keeps a stale green verdict when its latest run fails<a class="headerlink" href="#1-a-criterion-keeps-a-stale-green-verdict-when-its-latest-run-fails" title="Permanent link">#</a></h2>
 <p><strong>Where:</strong> <code>src/loopgraph/state.py</code>, <code>_latest_completed_run</code> / <code>derive_status</code>.</p>
 <p><code>_latest_completed_run</code> filters <code>ok IS NOT NULL</code>, so a run that timed out or errored is skipped and an <strong>older passing run still wins</strong>. Reproduced: a criterion closes, its next run errors, and it still reports <code>closed</code> with <code>terminal_state: success</code> and <code>check</code> exit 0. With <code>staleness_window_s</code> unset — the default — this persists indefinitely. <code>run</code> exits 2 at the time of the failure, but a later standalone <code>check</code> exits 0.</p>
 <p>This is spec-mandated behaviour (design §5.1, §6.2 treat a non-completing run as leaving the <em>previous</em> verdict intact), not an implementation slip. It is nonetheless the "dead but looks alive" pattern sitting in the module the Stop hook will read.</p>
 <p><strong>Ruling:</strong> deferred to the P2 hooks plan, where it actually bites. Decide there whether a criterion whose latest run failed should drop to <code>unproven</code>, or whether the hook should require a bounded <code>staleness_window_s</code> on every criterion.</p>
-<h2 id="2-stdout_int_gte-sign-flip-on-digit-digit">2. <code>stdout_int_gte</code> sign-flip on <code>&lt;digit&gt;.-&lt;digit&gt;</code></h2>
+<h2 id="2-stdout_int_gte-sign-flip-on-digit-digit">2. <code>stdout_int_gte</code> sign-flip on <code>&lt;digit&gt;.-&lt;digit&gt;</code><a class="headerlink" href="#2-stdout_int_gte-sign-flip-on-digit-digit" title="Permanent link">#</a></h2>
 <p><strong>Where:</strong> <code>src/loopgraph/evidence.py</code>, <code>_INT_TOKEN</code>.</p>
 <p>The shipped pattern is</p>
 <div class="codehilite"><pre><span></span><code><span class="n">_INT_TOKEN</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;(?&lt;!\d)(?&lt;!\d\.)-?\d+(?!\d)(?!\.\d)&quot;</span><span class="p">)</span>
@@ -64,9 +88,9 @@
 <p>It scored <strong>0 disagreements across 192,191 fuzz cases</strong> (vs. 568 for the shipped pattern), passes the required behaviour table, and passes the full suite 130/130.</p>
 <p><strong>Ruling:</strong> parked rather than landed, because the final gate had already passed and the reachable bug was fixed. Fold in with a regression test pinning <code>evaluate({"stdout_int_gte": 1}, 0, "Errors: 0.-1") is False</code>.</p>
 <p><strong>Note for whoever touches this line:</strong> it has now had three regexes and two of them shipped a hole that let <code>check</code> exit 0 on an unmet specification. Do not change it without a differential fuzz against an independently written reference.</p>
-<h2 id="3-design-spec-r-03-is-unimplemented">3. Design spec R-03 is unimplemented</h2>
+<h2 id="3-design-spec-r-03-is-unimplemented">3. Design spec R-03 is unimplemented<a class="headerlink" href="#3-design-spec-r-03-is-unimplemented" title="Permanent link">#</a></h2>
 <p>Design §8 specifies R-03 as <code>criterion open ∧ all deps open ∧ age &gt; threshold</code> → <code>blocked</code>. The plan superseded it with dependency-derived blocking, and R-07 (cycle detection) now occupies the <code>blocked</code> terminal state. Age-based escalation was deferred to the hooks plan. Either implement it there or amend the spec.</p>
-<h2 id="4-measured-derivation-is-cheap-evidence-execution-is-not">4. Measured: derivation is cheap, evidence execution is not</h2>
+<h2 id="4-measured-derivation-is-cheap-evidence-execution-is-not">4. Measured: derivation is cheap, evidence execution is not<a class="headerlink" href="#4-measured-derivation-is-cheap-evidence-execution-is-not" title="Permanent link">#</a></h2>
 <p>Latency probe against the merged tree, chain-shaped dependency graph, 9 repetitions after warm-up:</p>
 <div class="tablewrap"><table>
 <thead>
@@ -113,7 +137,7 @@
 <p>Roughly linear at ~0.09 ms per criterion. <strong>The N+1 query patterns deferred as YAGNI were correctly deferred</strong> — this is measured, not assumed. Occasional cold-cache spikes to ~130 ms appear in the max column; they do not compound.</p>
 <p>The cost that matters is elsewhere. Executing evidence commands took ~49 ms per criterion even with <code>true</code> as the command, dominated by subprocess spawn. Design §6.1 has the Stop hook "run the Evidence Runner over all criteria (or the stale/dirty subset)" — so a 50-criterion spec costs ~2.5 s per turn end before any real command runs. Actual evidence commands are database queries, <code>pytest</code>, <code>kubectl get</code>, <code>argocd app get</code>: seconds apiece.</p>
 <p><strong>The parenthetical is load-bearing and unspecified.</strong> Evidence selection is a P2 design problem, not an optimisation to defer — without it the gate is unaffordable on exactly the infra and investigation work the spec puts in scope.</p>
-<h2 id="5-smaller-items">5. Smaller items</h2>
+<h2 id="5-smaller-items">5. Smaller items<a class="headerlink" href="#5-smaller-items" title="Permanent link">#</a></h2>
 <ul>
 <li><code>derive_status</code> raises <code>TypeError</code> when handed a naive <code>datetime</code> — undocumented, untested, unreachable from the CLI.</li>
 <li><code>record_status</code> now takes a write lock (<code>BEGIN IMMEDIATE</code>) on every call including the no-op case, so it will fail against a read-only database file where it previously succeeded.</li>
@@ -125,10 +149,11 @@
 <li><code>shell=True</code> executes command strings stored in the database, so write access to <code>.loopgraph.db</code> is code execution the next time <code>run</code> fires. Inherent to the design and local-only, but P2 auto-executes these every turn.</li>
 </ul>
 <footer class="site">
-  loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
-  &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/followups.md">edit this page</a>
+  MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a> &middot;
+  <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/followups.md">edit this page</a>
 </footer>
 </main>
+
 </div>
 </body>
 </html>

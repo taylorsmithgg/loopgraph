@@ -5,35 +5,59 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gates · loopgraph</title>
 <meta name="description" content="The scope gate on agent dispatch and the loop gate on turn end -- what makes them reachable, and what stops them trapping a session.">
+<meta property="og:title" content="Gates · loopgraph">
+<meta property="og:description" content="The scope gate on agent dispatch and the loop gate on turn end -- what makes them reachable, and what stops them trapping a session.">
+<meta property="og:type" content="website">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/style.css">
+<script>
+(function () {
+  var k = 'loopgraph-theme', r = document.documentElement;
+  try { var s = localStorage.getItem(k); if (s) r.setAttribute('data-theme', s); } catch (e) {}
+  window.addEventListener('DOMContentLoaded', function () {
+    var b = document.getElementById('theme-toggle');
+    if (!b) return;
+    b.addEventListener('click', function () {
+      var dark = r.getAttribute('data-theme') === 'dark' ||
+        (!r.getAttribute('data-theme') &&
+         window.matchMedia('(prefers-color-scheme: dark)').matches);
+      var next = dark ? 'light' : 'dark';
+      r.setAttribute('data-theme', next);
+      try { localStorage.setItem(k, next); } catch (e) {}
+    });
+  });
+})();
+</script>
 </head>
 <body>
 <header class="masthead"><div class="inner">
   <a class="name" href="index.html">loopgraph</a>
   <span class="tag">Deterministic goal-state substrate for agent loops</span>
   <span class="spacer"></span>
-  <a class="gh" href="https://github.com/taylorsmithgg/loopgraph">GitHub</a>
+  <button class="util" id="theme-toggle" type="button"
+          aria-label="Switch between light and dark">theme</button>
+  <a class="util" href="https://github.com/taylorsmithgg/loopgraph">github</a>
 </div></header>
-<div class="wrap">
-<nav class="side">
+<div class="wrap has-toc">
+<nav class="side" aria-label="Sections">
 <ul>
 <li><a href="index.html">Overview</a></li>
 </ul>
-<h2>Guide</h2>
+<div class="eyebrow">Guide</div>
 <ul>
 <li><a href="cli.html">CLI &amp; exit codes</a></li>
 <li><a href="gates.html" class="current">Gates</a></li>
 <li><a href="memory.html">Memory</a></li>
 <li><a href="audit.html">Audit &amp; routing</a></li>
 </ul>
-<h2>Background</h2>
+<div class="eyebrow">Background</div>
 <ul>
 <li><a href="design.html">Design</a></li>
 <li><a href="coordination.html">Coordination design</a></li>
 <li><a href="implementation-plan.html">Implementation plan</a></li>
 <li><a href="followups.html">Open questions</a></li>
 </ul>
-<h2>Evidence</h2>
+<div class="eyebrow">Evidence</div>
 <ul>
 <li><a href="evidence/index.html">What was measured</a></li>
 <li><a href="evidence/corpus-baseline.html">Corpus baseline</a></li>
@@ -43,7 +67,7 @@
 </ul>
 </nav>
 <main>
-<h1 id="gates">Gates</h1>
+<h1 id="gates">Gates<a class="headerlink" href="#gates" title="Permanent link">#</a></h1>
 <p>Two gates. One stops two agents writing the same files. The other stops a turn
 ending while the work is unfinished.</p>
 <p>Both are on once the hooks are installed, and both are <strong>inert until you give
@@ -74,7 +98,7 @@ on its own bug is worse than no gate at all.</p>
 </tbody>
 </table></div>
 <p>Nothing is ever written into your project.</p>
-<h2 id="the-scope-gate">The scope gate</h2>
+<h2 id="the-scope-gate">The scope gate<a class="headerlink" href="#the-scope-gate" title="Permanent link">#</a></h2>
 <p>A <code>PreToolUse</code> hook refuses to dispatch an agent whose scope another agent
 already holds. You declare the scope in the dispatch prompt:</p>
 <div class="codehilite"><pre><span></span><code>SCOPE: charts/values.yaml sql/57 rules/registry.yaml
@@ -83,12 +107,12 @@ already holds. You declare the scope in the dispatch prompt:</p>
 <p>That is the whole interface. Undeclared scope is not blocked, non-Agent tools
 pass straight through, and a claim conflict exits 3 rather than merging two
 agents into the same files.</p>
-<h2 id="the-loop-gate">The loop gate</h2>
+<h2 id="the-loop-gate">The loop gate<a class="headerlink" href="#the-loop-gate" title="Permanent link">#</a></h2>
 <p>A <code>Stop</code> hook refuses to end the turn while declared criteria are unmet.</p>
 <p>It checks the cheap subset every turn — only criteria that are not yet closed.
 Before it will declare success, it runs a <strong>full sweep</strong>, so a criterion that
 closed early and broke later still gets caught.</p>
-<h3 id="it-cannot-trap-a-session">It cannot trap a session</h3>
+<h3 id="it-cannot-trap-a-session">It cannot trap a session<a class="headerlink" href="#it-cannot-trap-a-session" title="Permanent link">#</a></h3>
 <p>Two separate limits guarantee that, and the smaller one governs.</p>
 <p><strong><code>STAGNATION_TURNS</code> (8)</strong> ends the drive as <code>stalled</code> when nothing has closed
 in that many turns. Give the gate an unsatisfiable criterion and this is what
@@ -102,7 +126,7 @@ forever.</p>
 drive off mid-flight with its own message instead of yours.</p>
 <p>A run that ends <code>exhausted</code>, <code>stalled</code> or <code>blocked</code> allows the stop and says
 which. An error is never reported as success.</p>
-<h2 id="what-makes-it-self-starting">What makes it self-starting</h2>
+<h2 id="what-makes-it-self-starting">What makes it self-starting<a class="headerlink" href="#what-makes-it-self-starting" title="Permanent link">#</a></h2>
 <p>The loop gate is inert with no criteria. So "declare nothing" was always the
 cheapest way past it, and for the tool's whole life that is exactly what
 happened, everywhere.</p>
@@ -122,7 +146,7 @@ was already down is never installed, so pre-existing breakage cannot hold your
 turn open. It runs detached, so no prompt ever waits on it.</p>
 <p>Criteria carry their origin. <code>status</code> prints <code>[guard]</code> and <code>[auto]</code>, and
 <code>loopgraph drop &lt;id&gt;</code> withdraws anything that misread the request.</p>
-<h2 id="weakness-not-brevity">Weakness, not brevity</h2>
+<h2 id="weakness-not-brevity">Weakness, not brevity<a class="headerlink" href="#weakness-not-brevity" title="Permanent link">#</a></h2>
 <p><code>add</code> runs the check immediately and <strong>refuses one that already passes</strong>.</p>
 <p>The reason is simple: a check that is green before the work cannot tell done
 from not-done. A graph full of those is what "fully specified, nothing
@@ -172,7 +196,7 @@ tie-break.</p>
 put a multi-second model call on every first prompt and executed generated
 shell nobody had read. <code>weakness.is_safe()</code> survives as the deny-list for any
 future attempt, refusing <code>rm -rf</code>, <code>git push</code>, <code>sudo</code>, <code>curl | sh</code> and friends.</p>
-<h2 id="one-database-many-sessions">One database, many sessions</h2>
+<h2 id="one-database-many-sessions">One database, many sessions<a class="headerlink" href="#one-database-many-sessions" title="Permanent link">#</a></h2>
 <p>The database is keyed by git root, falling back to cwd. Every session working
 <strong>outside</strong> a repo therefore shares one graph with every other session outside
 a repo.</p>
@@ -225,7 +249,7 @@ specification — otherwise a neighbour's open goal would make it report failure
 forever. <code>status</code> also prints the session identity and shouts <code>MISMATCH</code> if the
 Stop hook ever sees a different one from the CLI, because that disagreement
 would disarm the gate invisibly.</p>
-<h3 id="stop_hook_active-is-not-a-permission-bit"><code>stop_hook_active</code> is not a permission bit</h3>
+<h3 id="stop_hook_active-is-not-a-permission-bit"><code>stop_hook_active</code> is not a permission bit<a class="headerlink" href="#stop_hook_active-is-not-a-permission-bit" title="Permanent link">#</a></h3>
 <p>It is <code>true</code> only while the harness is already continuing <em>because</em> a stop hook
 blocked. On every ordinary first stop it is <code>false</code> — which is the exact moment
 a block works.</p>
@@ -233,7 +257,7 @@ a block works.</p>
 on every normal turn: zero blocks across 15 project databases. It is now used
 for one thing only, resetting the consecutive-block count when a fresh stop
 chain starts.</p>
-<h2 id="the-hooks">The hooks</h2>
+<h2 id="the-hooks">The hooks<a class="headerlink" href="#the-hooks" title="Permanent link">#</a></h2>
 <div class="tablewrap"><table>
 <thead>
 <tr>
@@ -282,10 +306,20 @@ inert until criteria exist, so this asks once, on goal-shaped prompts, and
 silences itself the moment one criterion is declared. <code>LOOPGRAPH_SPEC_PROMPT=0</code>
 turns it off.</p>
 <footer class="site">
-  loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
-  &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/gates.md">edit this page</a>
+  MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a> &middot;
+  <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/gates.md">edit this page</a>
 </footer>
 </main>
+<aside class="toc" aria-label="On this page"><div class="eyebrow">On this page</div>
+<ul>
+<li><a href="#the-scope-gate">The scope gate</a></li>
+<li><a href="#the-loop-gate">The loop gate</a></li>
+<li><a href="#what-makes-it-self-starting">What makes it self-starting</a></li>
+<li><a href="#weakness-not-brevity">Weakness, not brevity</a></li>
+<li><a href="#one-database-many-sessions">One database, many sessions</a></li>
+<li><a href="#the-hooks">The hooks</a></li>
+</ul>
+</aside>
 </div>
 </body>
 </html>

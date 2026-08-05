@@ -5,35 +5,59 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Memory · loopgraph</title>
 <meta name="description" content="Retain, recall, supersede on the same graph -- deterministic BM25 retrieval, and a default-deny recall scope you configure with your own terms.">
+<meta property="og:title" content="Memory · loopgraph">
+<meta property="og:description" content="Retain, recall, supersede on the same graph -- deterministic BM25 retrieval, and a default-deny recall scope you configure with your own terms.">
+<meta property="og:type" content="website">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/style.css">
+<script>
+(function () {
+  var k = 'loopgraph-theme', r = document.documentElement;
+  try { var s = localStorage.getItem(k); if (s) r.setAttribute('data-theme', s); } catch (e) {}
+  window.addEventListener('DOMContentLoaded', function () {
+    var b = document.getElementById('theme-toggle');
+    if (!b) return;
+    b.addEventListener('click', function () {
+      var dark = r.getAttribute('data-theme') === 'dark' ||
+        (!r.getAttribute('data-theme') &&
+         window.matchMedia('(prefers-color-scheme: dark)').matches);
+      var next = dark ? 'light' : 'dark';
+      r.setAttribute('data-theme', next);
+      try { localStorage.setItem(k, next); } catch (e) {}
+    });
+  });
+})();
+</script>
 </head>
 <body>
 <header class="masthead"><div class="inner">
   <a class="name" href="index.html">loopgraph</a>
   <span class="tag">Deterministic goal-state substrate for agent loops</span>
   <span class="spacer"></span>
-  <a class="gh" href="https://github.com/taylorsmithgg/loopgraph">GitHub</a>
+  <button class="util" id="theme-toggle" type="button"
+          aria-label="Switch between light and dark">theme</button>
+  <a class="util" href="https://github.com/taylorsmithgg/loopgraph">github</a>
 </div></header>
 <div class="wrap">
-<nav class="side">
+<nav class="side" aria-label="Sections">
 <ul>
 <li><a href="index.html">Overview</a></li>
 </ul>
-<h2>Guide</h2>
+<div class="eyebrow">Guide</div>
 <ul>
 <li><a href="cli.html">CLI &amp; exit codes</a></li>
 <li><a href="gates.html">Gates</a></li>
 <li><a href="memory.html" class="current">Memory</a></li>
 <li><a href="audit.html">Audit &amp; routing</a></li>
 </ul>
-<h2>Background</h2>
+<div class="eyebrow">Background</div>
 <ul>
 <li><a href="design.html">Design</a></li>
 <li><a href="coordination.html">Coordination design</a></li>
 <li><a href="implementation-plan.html">Implementation plan</a></li>
 <li><a href="followups.html">Open questions</a></li>
 </ul>
-<h2>Evidence</h2>
+<div class="eyebrow">Evidence</div>
 <ul>
 <li><a href="evidence/index.html">What was measured</a></li>
 <li><a href="evidence/corpus-baseline.html">Corpus baseline</a></li>
@@ -43,14 +67,14 @@
 </ul>
 </nav>
 <main>
-<h1 id="memory">Memory</h1>
+<h1 id="memory">Memory<a class="headerlink" href="#memory" title="Permanent link">#</a></h1>
 <p><code>loopgraph mem</code> (or the <code>mem</code> shim) is memory on the same graph: <code>retain</code>,
 <code>recall</code>, <code>supersede</code>, <code>history</code>, <code>forget</code>, <code>import</code>.</p>
 <p>It exists because of what the alternatives ask for. Hindsight, Supermemory,
 Graphiti, Mem0 and LangMem each want their own store, sitting beside a graph
 that already has typed nodes, typed edges and an append-only delta log with a
 logical clock. The store was never the missing piece. Retrieval was.</p>
-<h2 id="how-it-behaves">How it behaves</h2>
+<h2 id="how-it-behaves">How it behaves<a class="headerlink" href="#how-it-behaves" title="Permanent link">#</a></h2>
 <p><strong>Global, not per-repo.</strong> One file, <code>~/.loopgraph/memory.db</code>. A trap learned in
 one repo is worth the most in a different one.</p>
 <p><strong>Three kinds</strong>, after Hindsight's pathways: <code>world</code> (how things are),
@@ -69,7 +93,7 @@ Delete it instead and the graph ends up asserting we always knew the new thing.<
 absolute score floor is a function of corpus size, so a floor tuned against 75
 memories silences a store with five — which is exactly when a new install gets
 judged.</p>
-<h2 id="recall-scope">Recall scope</h2>
+<h2 id="recall-scope">Recall scope<a class="headerlink" href="#recall-scope" title="Permanent link">#</a></h2>
 <p>One store is reachable from every harness on the machine, and those harnesses
 do not all run the same vendor's model.</p>
 <p>So recall is <strong>default-deny</strong>. A memory classified sensitive is withheld unless
@@ -82,7 +106,7 @@ DNS, private URLs.</p>
 <p>What it deliberately does <strong>not</strong> ship is a list of employers, clients or
 clusters. Those differ per operator, and a list of them committed to a public
 repository is the leak it was written to prevent.</p>
-<h2 id="your-own-terms">Your own terms</h2>
+<h2 id="your-own-terms">Your own terms<a class="headerlink" href="#your-own-terms" title="Permanent link">#</a></h2>
 <p>Yours go in <code>~/.loopgraph/sensitive.toml</code>, which loopgraph reads at
 classification time and never writes to. Override the location with
 <code>LOOPGRAPH_SENSITIVE_CONFIG</code>.</p>
@@ -106,10 +130,11 @@ because a term added after a leak scare should not have to wait for one.</p>
 silently ignored — a redactor that quietly stops redacting looks exactly like
 one with nothing to redact.</p>
 <footer class="site">
-  loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
-  &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/memory.md">edit this page</a>
+  MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a> &middot;
+  <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/memory.md">edit this page</a>
 </footer>
 </main>
+
 </div>
 </body>
 </html>

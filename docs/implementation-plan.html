@@ -5,35 +5,59 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Implementation plan · loopgraph</title>
 <meta name="description" content="The staged plan the core was built to, test-first, with the acceptance criteria for each stage.">
+<meta property="og:title" content="Implementation plan · loopgraph">
+<meta property="og:description" content="The staged plan the core was built to, test-first, with the acceptance criteria for each stage.">
+<meta property="og:type" content="website">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/style.css">
+<script>
+(function () {
+  var k = 'loopgraph-theme', r = document.documentElement;
+  try { var s = localStorage.getItem(k); if (s) r.setAttribute('data-theme', s); } catch (e) {}
+  window.addEventListener('DOMContentLoaded', function () {
+    var b = document.getElementById('theme-toggle');
+    if (!b) return;
+    b.addEventListener('click', function () {
+      var dark = r.getAttribute('data-theme') === 'dark' ||
+        (!r.getAttribute('data-theme') &&
+         window.matchMedia('(prefers-color-scheme: dark)').matches);
+      var next = dark ? 'light' : 'dark';
+      r.setAttribute('data-theme', next);
+      try { localStorage.setItem(k, next); } catch (e) {}
+    });
+  });
+})();
+</script>
 </head>
 <body>
 <header class="masthead"><div class="inner">
   <a class="name" href="index.html">loopgraph</a>
   <span class="tag">Deterministic goal-state substrate for agent loops</span>
   <span class="spacer"></span>
-  <a class="gh" href="https://github.com/taylorsmithgg/loopgraph">GitHub</a>
+  <button class="util" id="theme-toggle" type="button"
+          aria-label="Switch between light and dark">theme</button>
+  <a class="util" href="https://github.com/taylorsmithgg/loopgraph">github</a>
 </div></header>
 <div class="wrap">
-<nav class="side">
+<nav class="side" aria-label="Sections">
 <ul>
 <li><a href="index.html">Overview</a></li>
 </ul>
-<h2>Guide</h2>
+<div class="eyebrow">Guide</div>
 <ul>
 <li><a href="cli.html">CLI &amp; exit codes</a></li>
 <li><a href="gates.html">Gates</a></li>
 <li><a href="memory.html">Memory</a></li>
 <li><a href="audit.html">Audit &amp; routing</a></li>
 </ul>
-<h2>Background</h2>
+<div class="eyebrow">Background</div>
 <ul>
 <li><a href="design.html">Design</a></li>
 <li><a href="coordination.html">Coordination design</a></li>
 <li><a href="implementation-plan.html" class="current">Implementation plan</a></li>
 <li><a href="followups.html">Open questions</a></li>
 </ul>
-<h2>Evidence</h2>
+<div class="eyebrow">Evidence</div>
 <ul>
 <li><a href="evidence/index.html">What was measured</a></li>
 <li><a href="evidence/corpus-baseline.html">Corpus baseline</a></li>
@@ -43,14 +67,14 @@
 </ul>
 </nav>
 <main>
-<h1 id="loopgraph-core-p0p1-implementation-plan">loopgraph Core (P0+P1) Implementation Plan</h1>
+<h1 id="loopgraph-core-p0p1-implementation-plan">loopgraph Core (P0+P1) Implementation Plan<a class="headerlink" href="#loopgraph-core-p0p1-implementation-plan" title="Permanent link">#</a></h1>
 <blockquote>
 <p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
 </blockquote>
 <p><strong>Goal:</strong> Build the deterministic core that computes whether a specification is met — a context graph of criteria whose status is derived from evidence commands and never written by an agent.</p>
 <p><strong>Architecture:</strong> SQLite holds nodes, edges, evidence runs and an append-only delta log. There is deliberately <strong>no <code>status</code> column</strong> — status is derived on read from run history plus staleness, so no caller can assert "done." Threshold rules are pure predicates over that derived state. A stdlib-only CLI exposes authoring, evidence execution and state queries; later plans wire it into <code>Stop</code>/<code>SubagentStop</code> hooks.</p>
 <p><strong>Tech Stack:</strong> Python 3.12 (via uv), stdlib only at runtime (<code>sqlite3</code>, <code>argparse</code>, <code>subprocess</code>, <code>json</code>, <code>re</code>), pytest for tests.</p>
-<h2 id="global-constraints">Global Constraints</h2>
+<h2 id="global-constraints">Global Constraints<a class="headerlink" href="#global-constraints" title="Permanent link">#</a></h2>
 <ul>
 <li>Runtime dependencies: <strong>stdlib only.</strong> The gate runs on every turn; import latency is a feature. pytest is a dev dependency.</li>
 <li>Python 3.12, pinned via <code>uv python pin 3.12</code>. System Python is 3.9.6 — do not use it.</li>
@@ -60,14 +84,14 @@
 <li>All timestamps stored as ISO-8601 UTC strings (<code>datetime.now(timezone.utc).isoformat()</code>).</li>
 <li>Every guard must be watched to fail before it is trusted: each rule gets a test that proves it fires <strong>and</strong> a test that proves it stays silent.</li>
 </ul>
-<h2 id="deviations-from-the-spec-deliberate-flagged">Deviations from the spec (deliberate, flagged)</h2>
+<h2 id="deviations-from-the-spec-deliberate-flagged">Deviations from the spec (deliberate, flagged)<a class="headerlink" href="#deviations-from-the-spec-deliberate-flagged" title="Permanent link">#</a></h2>
 <ol>
 <li><strong>Spec §8 R-03 <code>blocked</code></strong> is defined as "criterion open ∧ all deps open ∧ age &gt; threshold." That conflicts with the §6.1 gate example ("C9 blocked by C7"). This plan implements <code>blocked</code> as <strong>dependency-derived</strong> — open/unproven with at least one non-closed dependency — which is what the gate example requires. Age-based escalation is deferred to the gate plan.</li>
 <li><strong>Spec §8 R-06 <code>dependency risk</code></strong> ("closing C would not unblock anything workable") is not directly checkable without a goal marker. This plan implements it as <strong>orphan detection</strong>: an open criterion with no incoming <code>depends_on</code> edge that is not flagged <code>is_goal</code>. Same intent, decidable.</li>
 <li>Turn counting and token spend are inputs the harness supplies. P1 stores them in <code>meta</code> and exposes <code>tick</code> / <code>spend</code> commands so rules R-01 and R-04 are testable now; the hooks plan wires real values.</li>
 </ol>
 <hr />
-<h2 id="file-structure">File Structure</h2>
+<h2 id="file-structure">File Structure<a class="headerlink" href="#file-structure" title="Permanent link">#</a></h2>
 <div class="tablewrap"><table>
 <thead>
 <tr>
@@ -111,7 +135,7 @@
 </tbody>
 </table></div>
 <hr />
-<h3 id="task-1-project-scaffold-and-schema">Task 1: Project scaffold and schema</h3>
+<h3 id="task-1-project-scaffold-and-schema">Task 1: Project scaffold and schema<a class="headerlink" href="#task-1-project-scaffold-and-schema" title="Permanent link">#</a></h3>
 <p><strong>Files:</strong>
 - Create: <code>pyproject.toml</code>, <code>src/loopgraph/__init__.py</code>, <code>src/loopgraph/db.py</code>
 - Test: <code>tests/test_db.py</code></p>
@@ -306,7 +330,7 @@ git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </sp
 </code></pre></div>
 
 <hr />
-<h3 id="task-2-logical-clock-and-delta-emission">Task 2: Logical clock and delta emission</h3>
+<h3 id="task-2-logical-clock-and-delta-emission">Task 2: Logical clock and delta emission<a class="headerlink" href="#task-2-logical-clock-and-delta-emission" title="Permanent link">#</a></h3>
 <p><strong>Files:</strong>
 - Modify: <code>src/loopgraph/db.py</code>
 - Test: <code>tests/test_db.py</code></p>
@@ -435,7 +459,7 @@ git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </sp
 </code></pre></div>
 
 <hr />
-<h3 id="task-3-node-and-edge-crud">Task 3: Node and edge CRUD</h3>
+<h3 id="task-3-node-and-edge-crud">Task 3: Node and edge CRUD<a class="headerlink" href="#task-3-node-and-edge-crud" title="Permanent link">#</a></h3>
 <p><strong>Files:</strong>
 - Create: <code>src/loopgraph/graph.py</code>
 - Test: <code>tests/test_graph.py</code></p>
@@ -659,7 +683,7 @@ git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </sp
 </code></pre></div>
 
 <hr />
-<h3 id="task-4-evidence-runner">Task 4: Evidence runner</h3>
+<h3 id="task-4-evidence-runner">Task 4: Evidence runner<a class="headerlink" href="#task-4-evidence-runner" title="Permanent link">#</a></h3>
 <p><strong>Files:</strong>
 - Create: <code>src/loopgraph/evidence.py</code>
 - Test: <code>tests/test_evidence.py</code></p>
@@ -842,7 +866,7 @@ git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </sp
 </code></pre></div>
 
 <hr />
-<h3 id="task-5-status-derivation">Task 5: Status derivation</h3>
+<h3 id="task-5-status-derivation">Task 5: Status derivation<a class="headerlink" href="#task-5-status-derivation" title="Permanent link">#</a></h3>
 <p><strong>Files:</strong>
 - Create: <code>src/loopgraph/state.py</code>
 - Test: <code>tests/test_state.py</code></p>
@@ -1038,7 +1062,7 @@ git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </sp
 </code></pre></div>
 
 <hr />
-<h3 id="task-6-workability-and-blocking">Task 6: Workability and blocking</h3>
+<h3 id="task-6-workability-and-blocking">Task 6: Workability and blocking<a class="headerlink" href="#task-6-workability-and-blocking" title="Permanent link">#</a></h3>
 <p><strong>Files:</strong>
 - Modify: <code>src/loopgraph/state.py</code>
 - Test: <code>tests/test_state.py</code></p>
@@ -1158,7 +1182,7 @@ git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </sp
 </code></pre></div>
 
 <hr />
-<h3 id="task-7-threshold-rules-and-terminal-state">Task 7: Threshold rules and terminal state</h3>
+<h3 id="task-7-threshold-rules-and-terminal-state">Task 7: Threshold rules and terminal state<a class="headerlink" href="#task-7-threshold-rules-and-terminal-state" title="Permanent link">#</a></h3>
 <p><strong>Files:</strong>
 - Create: <code>src/loopgraph/rules.py</code>
 - Test: <code>tests/test_rules.py</code></p>
@@ -1412,7 +1436,7 @@ git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </sp
 </code></pre></div>
 
 <hr />
-<h3 id="task-8-cli">Task 8: CLI</h3>
+<h3 id="task-8-cli">Task 8: CLI<a class="headerlink" href="#task-8-cli" title="Permanent link">#</a></h3>
 <p><strong>Files:</strong>
 - Create: <code>src/loopgraph/cli.py</code>
 - Test: <code>tests/test_cli.py</code></p>
@@ -1671,16 +1695,17 @@ git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </sp
 </code></pre></div>
 
 <hr />
-<h2 id="self-review-notes">Self-review notes</h2>
+<h2 id="self-review-notes">Self-review notes<a class="headerlink" href="#self-review-notes" title="Permanent link">#</a></h2>
 <p><strong>Spec coverage.</strong> §5.1 criterion schema → Task 3. §5.2 edges → Task 3 (<code>owned_by</code>/<code>evidenced_by</code>/<code>escalates_to</code> are storable via <code>link</code> but unused until the hooks plan). §5.3 delta events → Task 2. §6.2 termination → Tasks 5–7. §6.3 gate safety → <strong>hooks plan, not here.</strong> §7 fan-out → hooks plan. §8 rules → Task 7. §9 model roles, §10 security, §11 metrics → later plans. §13 SQLite/WAL → Task 1.</p>
 <p><strong>Deliberately out of scope:</strong> R-03 age-based blocked escalation, <code>contested</code> terminal state, and cost-per-accepted-change reporting. Each needs turn/spend data the harness supplies; they belong with the hooks and metrics plans.</p>
 <p><strong>Type consistency:</strong> <code>derive_status</code> returns the same four strings consumed by <code>workable</code>, <code>blocked</code>, <code>evaluate_rules</code> and <code>_print_human</code>. <code>terminal_state</code> returns <code>str | None</code> everywhere; the CLI compares against <code>"success"</code> only. <code>evaluate_rules</code> returns <code>list[dict]</code> with keys <code>rule</code> and <code>detail</code>, consumed as such in <code>_print_human</code> and in the <code>fired()</code> test helper.</p>
 <p><strong>Progress marker:</strong> stagnation is measured by stamping <code>meta['turns_at_last_progress']</code> when a new closing delta first becomes visible (<code>_sync_progress_marker</code>, called from both <code>tick</code> and <code>_turns_since_progress</code>). This is why R-01 stays silent when a criterion closes late in a barren stretch — the marker moves forward to the current turn.</p>
 <footer class="site">
-  loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
-  &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/implementation-plan.md">edit this page</a>
+  MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a> &middot;
+  <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/implementation-plan.md">edit this page</a>
 </footer>
 </main>
+
 </div>
 </body>
 </html>

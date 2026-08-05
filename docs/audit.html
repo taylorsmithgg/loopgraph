@@ -5,35 +5,59 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Audit and routing · loopgraph</title>
 <meta name="description" content="A second vendor auditing criteria for spec-gaming, Codex as implementer, and measuring which model earns its tokens.">
+<meta property="og:title" content="Audit and routing · loopgraph">
+<meta property="og:description" content="A second vendor auditing criteria for spec-gaming, Codex as implementer, and measuring which model earns its tokens.">
+<meta property="og:type" content="website">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/style.css">
+<script>
+(function () {
+  var k = 'loopgraph-theme', r = document.documentElement;
+  try { var s = localStorage.getItem(k); if (s) r.setAttribute('data-theme', s); } catch (e) {}
+  window.addEventListener('DOMContentLoaded', function () {
+    var b = document.getElementById('theme-toggle');
+    if (!b) return;
+    b.addEventListener('click', function () {
+      var dark = r.getAttribute('data-theme') === 'dark' ||
+        (!r.getAttribute('data-theme') &&
+         window.matchMedia('(prefers-color-scheme: dark)').matches);
+      var next = dark ? 'light' : 'dark';
+      r.setAttribute('data-theme', next);
+      try { localStorage.setItem(k, next); } catch (e) {}
+    });
+  });
+})();
+</script>
 </head>
 <body>
 <header class="masthead"><div class="inner">
   <a class="name" href="index.html">loopgraph</a>
   <span class="tag">Deterministic goal-state substrate for agent loops</span>
   <span class="spacer"></span>
-  <a class="gh" href="https://github.com/taylorsmithgg/loopgraph">GitHub</a>
+  <button class="util" id="theme-toggle" type="button"
+          aria-label="Switch between light and dark">theme</button>
+  <a class="util" href="https://github.com/taylorsmithgg/loopgraph">github</a>
 </div></header>
 <div class="wrap">
-<nav class="side">
+<nav class="side" aria-label="Sections">
 <ul>
 <li><a href="index.html">Overview</a></li>
 </ul>
-<h2>Guide</h2>
+<div class="eyebrow">Guide</div>
 <ul>
 <li><a href="cli.html">CLI &amp; exit codes</a></li>
 <li><a href="gates.html">Gates</a></li>
 <li><a href="memory.html">Memory</a></li>
 <li><a href="audit.html" class="current">Audit &amp; routing</a></li>
 </ul>
-<h2>Background</h2>
+<div class="eyebrow">Background</div>
 <ul>
 <li><a href="design.html">Design</a></li>
 <li><a href="coordination.html">Coordination design</a></li>
 <li><a href="implementation-plan.html">Implementation plan</a></li>
 <li><a href="followups.html">Open questions</a></li>
 </ul>
-<h2>Evidence</h2>
+<div class="eyebrow">Evidence</div>
 <ul>
 <li><a href="evidence/index.html">What was measured</a></li>
 <li><a href="evidence/corpus-baseline.html">Corpus baseline</a></li>
@@ -43,8 +67,8 @@
 </ul>
 </nav>
 <main>
-<h1 id="audit-and-routing">Audit and routing</h1>
-<h2 id="the-spec-gaming-audit">The spec-gaming audit</h2>
+<h1 id="audit-and-routing">Audit and routing<a class="headerlink" href="#audit-and-routing" title="Permanent link">#</a></h1>
+<h2 id="the-spec-gaming-audit">The spec-gaming audit<a class="headerlink" href="#the-spec-gaming-audit" title="Permanent link">#</a></h2>
 <p><code>loopgraph game [&lt;criterion&gt;]</code> asks Codex, read-only, whether a criterion's
 evidence command can be satisfied without achieving its intent.</p>
 <p>Here it is on this repo's own test criterion:</p>
@@ -63,7 +87,7 @@ to skip it, and <code>LOOPGRAPH_AUDIT=0</code> to disable it entirely.</p>
 detection measured <em>worse</em> (F1 0.365 → 0.333), and judges over-reject
 conformant work by 35–45%. So no model gates anything here. The audit runs at
 authoring time and a human decides.</p>
-<h3 id="why-it-takes-20-seconds">Why it takes ~20 seconds</h3>
+<h3 id="why-it-takes-20-seconds">Why it takes ~20 seconds<a class="headerlink" href="#why-it-takes-20-seconds" title="Permanent link">#</a></h3>
 <p>Codex startup is 2.6–4.2s, which turned out not to be the cost. Two of our own
 choices were:</p>
 <div class="tablewrap"><table>
@@ -89,7 +113,7 @@ same verdict. <code>minimal</code> fails outright. The configured model is now f
 explicitly and effort is pinned to <code>low</code>.</p>
 <p>What remains is the model actually reasoning about the question, which is why
 the audit is detached rather than optimised further.</p>
-<h3 id="sandbox-policy">Sandbox policy</h3>
+<h3 id="sandbox-policy">Sandbox policy<a class="headerlink" href="#sandbox-policy" title="Permanent link">#</a></h3>
 <p><code>--ignore-user-config</code> buys startup speed and tool isolation (300s → 23s), but
 it also drops <code>approval_policy</code> — and without that forwarded, codex reverts to
 prompting and blocks forever on a pipe. Both <code>approval_policy</code> and
@@ -104,7 +128,7 @@ the rest of this system is built on.</p>
 work in a scratch directory and clean up, and it has been observed doing so,
 but that is behaviour rather than a guarantee. Run it on a clean tree, or pass
 <code>--sandbox read-only</code> when that matters more than proof.</p>
-<h3 id="sabotage-is-not-a-criterion-problem">Sabotage is not a criterion problem</h3>
+<h3 id="sabotage-is-not-a-criterion-problem">Sabotage is not a criterion problem<a class="headerlink" href="#sabotage-is-not-a-criterion-problem" title="Permanent link">#</a></h3>
 <p>Audited against four real criteria, the verdict came back gameable on <strong>all
 four</strong> — including <code>uv run pytest -q</code>, cheated by dropping a <code>conftest.py</code> that
 skips every test, and three others via <code>PATH</code> shims.</p>
@@ -134,7 +158,7 @@ rather than heeded. So verdicts now carry a <code>cheat_class</code>:</p>
 <p><code>status</code> lists them separately for that reason, and reports <code>unaudited checks:</code>
 alongside <code>GAMEABLE checks:</code> — an un-audited check is one you do not know is
 gameable, surfaced the same way <code>unproven</code> is.</p>
-<h3 id="what-weakness-does-not-tell-you">What weakness does not tell you</h3>
+<h3 id="what-weakness-does-not-tell-you">What weakness does not tell you<a class="headerlink" href="#what-weakness-does-not-tell-you" title="Permanent link">#</a></h3>
 <p>The gaming experiment was meant to test whether a low weakness score predicts a
 gameable check. With the verdict saturated at 100%, there was no signal to
 correlate against.</p>
@@ -142,7 +166,7 @@ correlate against.</p>
 drives toward outcomes rather than one guessed implementation. It is <strong>not</strong>
 validated as a predictor of spec-gaming, and nothing here should be read as
 claiming otherwise.</p>
-<h2 id="codex-as-implementer">Codex as implementer</h2>
+<h2 id="codex-as-implementer">Codex as implementer<a class="headerlink" href="#codex-as-implementer" title="Permanent link">#</a></h2>
 <div class="codehilite"><pre><span></span><code>loopgraph exec impl-1 --plan plan.md --scope util.py --sandbox workspace-write
 model=codex closed=1 tokens=26952 sandbox=workspace-write terminal_state=success
 </code></pre></div>
@@ -151,7 +175,7 @@ model=codex closed=1 tokens=26952 sandbox=workspace-write terminal_state=success
 the acceptance criteria to <code>codex exec</code>, then re-runs the criteria itself. The
 implementer never grades its own work. Its prompt forbids editing or weakening
 the criteria, so the only way to satisfy a check is to do the work.</p>
-<h3 id="what-the-evidence-actually-supports">What the evidence actually supports</h3>
+<h3 id="what-the-evidence-actually-supports">What the evidence actually supports<a class="headerlink" href="#what-the-evidence-actually-supports" title="Permanent link">#</a></h3>
 <p>Primary sources only, and they do not say what the popular version says.</p>
 <p><strong>Plan-then-implement is well supported.</strong>
 <a href="https://arxiv.org/pdf/2303.06689">Self-planning code generation</a> reports up to
@@ -179,7 +203,7 @@ model-specific and moves results substantially (GPT best with narrative, Qwen
 with checklists, Gemini with pseudocode). <code>loopgraph exec --plan-format
 narrative|checklist|pseudocode</code> records which you used, and <code>route</code> groups by
 it, so the question becomes measurable rather than arguable.</p>
-<h2 id="which-model-for-which-task">Which model for which task</h2>
+<h2 id="which-model-for-which-task">Which model for which task<a class="headerlink" href="#which-model-for-which-task" title="Permanent link">#</a></h2>
 <p>Published benchmarks will not answer this for your workload. Opus 5 and GPT-5.6
 Sol sit within a point of each other on SWE-bench Verified and tie on
 Terminal-Bench.</p>
@@ -202,7 +226,7 @@ the table can group by it. It dispatches nowhere and selects nothing.</p>
 <p><code>cost/accepted</code> is tokens per criterion that actually closed — the metric the
 loop-engineering paper proposes and notes is almost never measured. A <code>-</code> means
 the agent spent and landed nothing, which is the number worth seeing.</p>
-<h3 id="what-attribution-is-and-is-not">What attribution is and is not</h3>
+<h3 id="what-attribution-is-and-is-not">What attribution is and is not<a class="headerlink" href="#what-attribution-is-and-is-not" title="Permanent link">#</a></h3>
 <p>A close is counted when a criterion inside that agent's scope transitions to
 closed during its run, derived from the delta log.</p>
 <p>That is correlation, not proof of causation. A criterion can close for an
@@ -210,10 +234,11 @@ unrelated reason. It is measured rather than self-reported, which is the whole
 point, but do not read a single row as a verdict. Accumulate rows before you
 route anything on them.</p>
 <footer class="site">
-  loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
-  &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/audit.md">edit this page</a>
+  MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a> &middot;
+  <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/audit.md">edit this page</a>
 </footer>
 </main>
+
 </div>
 </body>
 </html>

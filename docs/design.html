@@ -5,35 +5,59 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Design · loopgraph</title>
 <meta name="description" content="The specification loopgraph was built from: what a criterion is, how the gates read it, and what was rejected.">
+<meta property="og:title" content="Design · loopgraph">
+<meta property="og:description" content="The specification loopgraph was built from: what a criterion is, how the gates read it, and what was rejected.">
+<meta property="og:type" content="website">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/style.css">
+<script>
+(function () {
+  var k = 'loopgraph-theme', r = document.documentElement;
+  try { var s = localStorage.getItem(k); if (s) r.setAttribute('data-theme', s); } catch (e) {}
+  window.addEventListener('DOMContentLoaded', function () {
+    var b = document.getElementById('theme-toggle');
+    if (!b) return;
+    b.addEventListener('click', function () {
+      var dark = r.getAttribute('data-theme') === 'dark' ||
+        (!r.getAttribute('data-theme') &&
+         window.matchMedia('(prefers-color-scheme: dark)').matches);
+      var next = dark ? 'light' : 'dark';
+      r.setAttribute('data-theme', next);
+      try { localStorage.setItem(k, next); } catch (e) {}
+    });
+  });
+})();
+</script>
 </head>
 <body>
 <header class="masthead"><div class="inner">
   <a class="name" href="index.html">loopgraph</a>
   <span class="tag">Deterministic goal-state substrate for agent loops</span>
   <span class="spacer"></span>
-  <a class="gh" href="https://github.com/taylorsmithgg/loopgraph">GitHub</a>
+  <button class="util" id="theme-toggle" type="button"
+          aria-label="Switch between light and dark">theme</button>
+  <a class="util" href="https://github.com/taylorsmithgg/loopgraph">github</a>
 </div></header>
-<div class="wrap">
-<nav class="side">
+<div class="wrap has-toc">
+<nav class="side" aria-label="Sections">
 <ul>
 <li><a href="index.html">Overview</a></li>
 </ul>
-<h2>Guide</h2>
+<div class="eyebrow">Guide</div>
 <ul>
 <li><a href="cli.html">CLI &amp; exit codes</a></li>
 <li><a href="gates.html">Gates</a></li>
 <li><a href="memory.html">Memory</a></li>
 <li><a href="audit.html">Audit &amp; routing</a></li>
 </ul>
-<h2>Background</h2>
+<div class="eyebrow">Background</div>
 <ul>
 <li><a href="design.html" class="current">Design</a></li>
 <li><a href="coordination.html">Coordination design</a></li>
 <li><a href="implementation-plan.html">Implementation plan</a></li>
 <li><a href="followups.html">Open questions</a></li>
 </ul>
-<h2>Evidence</h2>
+<div class="eyebrow">Evidence</div>
 <ul>
 <li><a href="evidence/index.html">What was measured</a></li>
 <li><a href="evidence/corpus-baseline.html">Corpus baseline</a></li>
@@ -43,11 +67,11 @@
 </ul>
 </nav>
 <main>
-<h1 id="loopgraph-design">loopgraph — Design</h1>
+<h1 id="loopgraph-design">loopgraph — Design<a class="headerlink" href="#loopgraph-design" title="Permanent link">#</a></h1>
 <p><strong>Date:</strong> 2026-08-03
 <strong>Status:</strong> Approved design, pre-implementation</p>
 <hr />
-<h2 id="1-problem">1. Problem</h2>
+<h2 id="1-problem">1. Problem<a class="headerlink" href="#1-problem" title="Permanent link">#</a></h2>
 <p>Agent loops stop before the goal is met, and fan-out produces no global movement. Stated directly by the operator:</p>
 <blockquote>
 <p>"sheer laziness. goals not being met. distributing to sub agents and not getting any meaningful progress globally."</p>
@@ -81,9 +105,9 @@
 </tbody>
 </table></div>
 <p>The shared defect is already recorded in operator memory as the dominant local failure class: <strong>guards, jobs and alerts that report success while doing nothing.</strong> Measure the effect, not the status.</p>
-<h2 id="2-evidence-base">2. Evidence base</h2>
+<h2 id="2-evidence-base">2. Evidence base<a class="headerlink" href="#2-evidence-base" title="Permanent link">#</a></h2>
 <p>Three sources drive this design. Each is used for what it actually supports, and its limits are stated.</p>
-<h3 id="21-loop-specification-and-its-anti-patterns-arxiv-260700038">2.1 Loop specification and its anti-patterns — arXiv 2607.00038</h3>
+<h3 id="21-loop-specification-and-its-anti-patterns-arxiv-260700038">2.1 Loop specification and its anti-patterns — arXiv 2607.00038<a class="headerlink" href="#21-loop-specification-and-its-anti-patterns-arxiv-260700038" title="Permanent link">#</a></h3>
 <p>Position paper defining the <em>loop specification</em>: trigger, goal, verification, stopping rule, memory. Contributes:</p>
 <ul>
 <li><strong>Five-level verification ladder.</strong> L1 deterministic, L2 rule/constraint, L3 delayed field truth, L4 model-as-judge, L5 human. L1–L2 are the autonomous zone. Design rule: <em>do not pretend level 4 is level 1.</em></li>
@@ -93,12 +117,12 @@
 <li><strong>Cost per accepted change</strong> proposed as the headline health metric — tokens spent divided by changes that survived verification.</li>
 </ul>
 <p><em>Limits:</em> position paper over a descriptive corpus study, single coder, no controlled experiment, no measured budget. Treat as vocabulary and design guidance, not as measurement.</p>
-<h3 id="22-judge-fragility-two-empirical-results">2.2 Judge fragility — two empirical results</h3>
+<h3 id="22-judge-fragility-two-empirical-results">2.2 Judge fragility — two empirical results<a class="headerlink" href="#22-judge-fragility-two-empirical-results" title="Permanent link">#</a></h3>
 <p><strong>Ensembling reviewers hurts</strong> (<a href="https://arxiv.org/html/2606.15689v1">arXiv 2606.15689</a>, 150 samples): Haiku 4.5 alone F1 <strong>0.365</strong>; Haiku + Sonnet union <strong>0.333</strong>. Models detect largely the same bugs, so a second reviewer adds its false positives without adding true positives. 19/150 samples were a shared blind spot. Bigger is not better either — Haiku 4.5 beat Sonnet 4.6 on F1 and recall (+18%) at 3.2× lower cost. The same paper's authors used Opus 4.6 as judge and flag bias toward Anthropic output style.</p>
 <p><strong>Judges over-reject conformant work</strong> (<a href="https://arxiv.org/pdf/2603.00539">arXiv 2603.00539</a>): systematic overcorrection, with false rejection of conformant code in the ~35–45% range; chain-of-thought recovers only ~5–10%.</p>
 <p><em>Consequence, and it is the hinge of this design:</em> <strong>a model-as-judge inside a blocking gate produces a loop that cannot terminate.</strong> Not a tuning problem. It is the unattended-runaway anti-pattern wearing a lab coat.</p>
 <p><em>Limits:</em> the overcorrection figures come from a GPT-4/Llama-era setup and are <strong>not</strong> measured on Opus 5 or GPT-5.6. Treat the direction as solid and the exact percentage as unestablished.</p>
-<h3 id="23-context-graph-and-delta-events-arxiv-260707721">2.3 Context graph and delta events — arXiv 2607.07721</h3>
+<h3 id="23-context-graph-and-delta-events-arxiv-260707721">2.3 Context graph and delta events — arXiv 2607.07721<a class="headerlink" href="#23-context-graph-and-delta-events-arxiv-260707721" title="Permanent link">#</a></h3>
 <p>Live, attributed, time-stamped multigraph of entities with <code>state</code>, <code>owner</code>, and typed edges (<code>depends_on</code>, <code>blocks</code>, <code>owned_by</code>, <code>escalates_to</code>). Every state-modifying operation emits a <strong>delta event</strong> onto an immutable log. A Delta Detection Engine evaluates deterministic threshold rules over the graph.</p>
 <p>The architectural move this design adopts, from its §7:</p>
 <blockquote>
@@ -106,7 +130,7 @@
 </blockquote>
 <p><em>Limits:</em> single-author paper; the demo graph is 3 persons / 3 tasks / 1 asset; P@5 0.83, FPR 0.11 and 47 min → &lt;30 s come from three self-authored case studies, not a controlled benchmark. <strong>Adopt the substrate, not the numbers.</strong></p>
 <p><em>Not adopted:</em> the Proactivity Scorer and notification layer. That machinery ranks insights for human attention (urgency, relevance, persona-fit via an admittedly unlearned lookup table, dedup, cooldown). This system does not rank notifications; it selects the next action, which dependency edges already determine.</p>
-<h3 id="24-model-capability-routing-evidence">2.4 Model capability — routing evidence</h3>
+<h3 id="24-model-capability-routing-evidence">2.4 Model capability — routing evidence<a class="headerlink" href="#24-model-capability-routing-evidence" title="Permanent link">#</a></h3>
 <div class="tablewrap"><table>
 <thead>
 <tr>
@@ -150,7 +174,7 @@
 </tbody>
 </table></div>
 <p><strong>Read:</strong> frontier-vs-frontier capability is effectively a coin flip. The exploitable asymmetries are <strong>cost, latency and vendor-independence</strong> — not intelligence. Routing is therefore a cost knob, not an architectural decision.</p>
-<h2 id="3-design-principles">3. Design principles</h2>
+<h2 id="3-design-principles">3. Design principles<a class="headerlink" href="#3-design-principles" title="Permanent link">#</a></h2>
 <ol>
 <li><strong>State is deterministic. Models never vote on it.</strong> The graph and the rules decide what is open, closed, stale or blocked. This is what makes the overcorrection result irrelevant rather than something to engineer around.</li>
 <li><strong>Done is computed, never claimed.</strong> A criterion closes when its evidence command runs and satisfies its expectation. No agent writes <code>status</code>.</li>
@@ -160,7 +184,7 @@
 <li><strong>Model judgment moves to authoring time.</strong> A human approves the criteria once, rather than an unattended judge adjudicating every turn.</li>
 <li><strong>Every brake fails loudly.</strong> A rule that matches nothing, an evidence command that never ran, a subagent that changed nothing — each is an explicit state, never silence.</li>
 </ol>
-<h2 id="4-architecture">4. Architecture</h2>
+<h2 id="4-architecture">4. Architecture<a class="headerlink" href="#4-architecture" title="Permanent link">#</a></h2>
 <div class="codehilite"><pre><span></span><code>   sources of truth            deterministic core                harness
   ┌────────────────┐        ┌──────────────────────┐        ┌──────────────┐
   │ repo / tests   │        │  Context Graph       │        │ Stop hook    │
@@ -187,8 +211,8 @@
 <li><strong>Gate</strong> — <code>Stop</code> / <code>SubagentStop</code> hooks that read the graph and block or allow.</li>
 </ul>
 <p><strong>Storage: SQLite, not NetworkX.</strong> The source paper uses in-memory NetworkX for a demo. The gate runs as a separate short-lived process on every turn, concurrently with subagents. It needs durability, transactions and concurrent readers. Tables: <code>nodes</code>, <code>edges</code>, <code>deltas</code>, <code>runs</code>.</p>
-<h2 id="5-data-model">5. Data model</h2>
-<h3 id="51-criterion-node">5.1 Criterion node</h3>
+<h2 id="5-data-model">5. Data model<a class="headerlink" href="#5-data-model" title="Permanent link">#</a></h2>
+<h3 id="51-criterion-node">5.1 Criterion node<a class="headerlink" href="#51-criterion-node" title="Permanent link">#</a></h3>
 <div class="codehilite"><pre><span></span><code><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">C7</span>
 <span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">criterion</span>
 <span class="nt">statement</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Linux</span><span class="nv"> </span><span class="s">hosts</span><span class="nv"> </span><span class="s">appear</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">lake&quot;</span>
@@ -203,7 +227,7 @@
 
 <p><code>status</code> is <strong>never</strong> written by an agent. It is computed by the Evidence Runner.</p>
 <p><strong><code>unproven</code> is a distinct state, not a flavour of <code>open</code>.</strong> A criterion whose evidence command has never completed successfully cannot be closed, and cannot be silently treated as failing either — it means the check itself is unbuilt. This is the schema form of the local dominant defect: a guard that has never been watched to fail is not a guard. It is derived from the source paper's confidence term <code>K(c) = 1 − missing_props/total_props</code>.</p>
-<h3 id="52-edges">5.2 Edges</h3>
+<h3 id="52-edges">5.2 Edges<a class="headerlink" href="#52-edges" title="Permanent link">#</a></h3>
 <div class="tablewrap"><table>
 <thead>
 <tr>
@@ -234,15 +258,15 @@
 </tr>
 </tbody>
 </table></div>
-<h3 id="53-delta-event">5.3 Delta event</h3>
+<h3 id="53-delta-event">5.3 Delta event<a class="headerlink" href="#53-delta-event" title="Permanent link">#</a></h3>
 <div class="codehilite"><pre><span></span><code>δ = (entity_id, change_type, old, new, wall_time, logical_clock)
 change_type ∈ { STATE_TRANSITION, THRESHOLD_BREACH, STALENESS,
                 DEPENDENCY_RISK, OWNERSHIP_CHANGE }
 </code></pre></div>
 
 <p>Append-only. Replayable. <strong>This log is the durable memory</strong> the loop paper names as the least-developed element of current practice (32% of corpus) — and because it is derived from evidence runs rather than appended by agents, it is curated by construction, which is the condition under which accumulated memory helps rather than degrades performance.</p>
-<h2 id="6-the-gate">6. The gate</h2>
-<h3 id="61-stop-hook-contract">6.1 Stop hook contract</h3>
+<h2 id="6-the-gate">6. The gate<a class="headerlink" href="#6-the-gate" title="Permanent link">#</a></h2>
+<h3 id="61-stop-hook-contract">6.1 Stop hook contract<a class="headerlink" href="#61-stop-hook-contract" title="Permanent link">#</a></h3>
 <p>On every turn end:</p>
 <ol>
 <li>Run the Evidence Runner over all criteria (or the stale/dirty subset).</li>
@@ -256,7 +280,7 @@ change_type ∈ { STATE_TRANSITION, THRESHOLD_BREACH, STALENESS,
 </code></pre></div>
 
 <p>The <code>reason</code> carries <strong>actual command output</strong>, not a summary. Advisory-only findings use <code>hookSpecificOutput.additionalContext</code> instead, leaving <code>decision</code> unset.</p>
-<h3 id="62-termination">6.2 Termination</h3>
+<h3 id="62-termination">6.2 Termination<a class="headerlink" href="#62-termination" title="Permanent link">#</a></h3>
 <p>The loop stops when, and only when:</p>
 <ul>
 <li>zero <code>open</code> criteria, <strong>and</strong></li>
@@ -265,7 +289,7 @@ change_type ∈ { STATE_TRANSITION, THRESHOLD_BREACH, STALENESS,
 <li>no threshold rule firing.</li>
 </ul>
 <p>All four are deterministic. Nothing here consults a model.</p>
-<h3 id="63-gate-safety">6.3 Gate safety</h3>
+<h3 id="63-gate-safety">6.3 Gate safety<a class="headerlink" href="#63-gate-safety" title="Permanent link">#</a></h3>
 <ul>
 <li><strong><code>stop_hook_active</code> is the harness's loop guard, not a capability flag.</strong> It is <code>true</code> only while Claude Code is <em>already continuing because a stop hook blocked</em>; it is <code>false</code> on every ordinary first stop — which is exactly when a block lands. Reading <code>false</code> as "cannot block" disarms the gate on every normal turn (it did, for the gate's whole life: zero blocks in 15 project databases). Use it only to reset the consecutive-block count at the start of a fresh stop chain.</li>
 <li><strong>The harness caps blocks too.</strong> <code>CLAUDE_CODE_STOP_HOOK_BLOCK_CAP</code> (default 8) overrides the hook and ends the turn with its own message. Keep <code>LOOPGRAPH_MAX_BLOCKS</code> under it so loopgraph names the terminal state itself; raise both together to drive longer.</li>
@@ -273,7 +297,7 @@ change_type ∈ { STATE_TRANSITION, THRESHOLD_BREACH, STALENESS,
 <li><strong>Gate errors do not block.</strong> An exception in the gate exits non-blocking with a loud <code>systemMessage</code>. A broken gate must never masquerade as a failing goal — and must never silently pass either.</li>
 <li><strong>Timeout.</strong> Evidence commands carry per-criterion timeouts; a timeout is <code>unproven</code>, not <code>closed</code>.</li>
 </ul>
-<h3 id="64-criterion-selection-weakest-not-shortest">6.4 Criterion selection: weakest, not shortest</h3>
+<h3 id="64-criterion-selection-weakest-not-shortest">6.4 Criterion selection: weakest, not shortest<a class="headerlink" href="#64-criterion-selection-weakest-not-shortest" title="Permanent link">#</a></h3>
 <p>Added after the design proved inert in practice. Bennett, <a href="https://arxiv.org/abs/2301.12987">arXiv:2301.12987</a>: among hypotheses that entail the observations, maximising <strong>extension</strong> beats minimising description length by 1.1–5× on generalisation. A criterion is a hypothesis about done-ness; its extension is the set of world-states where its check passes.</p>
 <ul>
 <li><strong>Entailment gate, first.</strong> <code>add</code> runs the check at authoring time and refuses one that already passes. A green-at-authoring check does not entail "the goal is unmet" — it explains nothing, and a graph full of them is what a fully-specified-and-idle system looks like. <code>--guard</code> is the exception (fences are green by definition), <code>--allow-green</code> the override.</li>
@@ -281,13 +305,13 @@ change_type ∈ { STATE_TRANSITION, THRESHOLD_BREACH, STALENESS,
 <li><strong>Order is load-bearing.</strong> Maximising weakness without the gate selects <code>true</code>, which is the maximal-extension command and the worst possible check. Brevity survives only as a tie-break.</li>
 <li><strong>Never trust a derived command blindly.</strong> <code>weakness.is_safe()</code> refuses <code>rm -rf</code>, <code>git push</code>, <code>sudo</code>, <code>curl | sh</code> and friends. Model-derived criteria were prototyped and dropped — a multi-second call on every prompt, executing shell nobody read.</li>
 </ul>
-<h3 id="65-self-starting-declaring-nothing-is-a-decision-not-a-default">6.5 Self-starting: declaring nothing is a decision, not a default</h3>
+<h3 id="65-self-starting-declaring-nothing-is-a-decision-not-a-default">6.5 Self-starting: declaring nothing is a decision, not a default<a class="headerlink" href="#65-self-starting-declaring-nothing-is-a-decision-not-a-default" title="Permanent link">#</a></h3>
 <p>The gate is inert without criteria, so the cheapest path was always to declare none — and everywhere, that is what happened. <code>UserPromptSubmit</code> records the stated goal as pending; the <code>Stop</code> hook refuses a turn that answered it with nothing, at most <code>MAX_SPEC_BLOCKS</code> times, then allows the stop while naming the result <strong>UNVERIFIED, not verified</strong>. <code>loopgraph noop --reason</code> is a first-class answer. Guards do not satisfy the demand: a green suite is not a statement of what this request meant, and <code>terminal_state</code> must not report <code>success</code> on guards alone while a goal is pending.</p>
-<h3 id="66-one-database-many-sessions">6.6 One database, many sessions</h3>
+<h3 id="66-one-database-many-sessions">6.6 One database, many sessions<a class="headerlink" href="#66-one-database-many-sessions" title="Permanent link">#</a></h3>
 <p>The db is keyed by git root and falls back to cwd, so every session outside a repo shares one graph. Observed live: three sessions in <code>$HOME</code>, one declaring a goal mid-work while the others sat blocked on criteria they had never heard of.</p>
 <p>A goal belongs to whoever stated it. <code>add</code> stamps the authoring session; the gate enforces a goal only for its owner. Guards and <code>--global</code> criteria bind everyone; so does everything when no session identity is available, because a gate that quietly stops gating is the one failure never worth risking.</p>
 <p><strong>Unowned criteria bind nobody.</strong> Enforcing them was tried first and is the worse failure: every session that dies mid-goal leaves a permanent hostage in the shared graph. The compensating control is that not-enforced is never unmentioned — <code>status</code> lists them, the Stop hook names them on the way past, and <code>adopt</code>/<code>drop</code> are offered inline. <code>check</code> answers for the calling session's specification; <code>status</code> shows the whole board and shouts <code>MISMATCH</code> if the hook and the CLI ever disagree about session identity.</p>
-<h2 id="7-fan-out">7. Fan-out</h2>
+<h2 id="7-fan-out">7. Fan-out<a class="headerlink" href="#7-fan-out" title="Permanent link">#</a></h2>
 <p>The unaddressed half of the problem. A subagent is assigned <strong>criterion IDs</strong>, not prose.</p>
 <ol>
 <li><code>SubagentStop</code> fires with <code>agent_id</code>, <code>agent_type</code>.</li>
@@ -298,7 +322,7 @@ change_type ∈ { STATE_TRANSITION, THRESHOLD_BREACH, STALENESS,
 <p>This generalises the operator's existing <code>tool_uses == 0</code> heuristic from <em>status</em> to <em>effect</em>. A subagent that made many tool calls and moved nothing is caught identically to one that made none.</p>
 <p><strong>Global progress</strong> = closing deltas across the whole graph per unit spend. Derived from artifacts. It is not an aggregation of N self-reports, which is what made previous fan-out unmeasurable.</p>
 <p><strong>Worktree isolation is mandatory, not preferential,</strong> for any two workers that write. Sharing one checkout has already landed a commit on another agent's branch here (!202).</p>
-<h2 id="8-threshold-rules-and-terminal-states">8. Threshold rules and terminal states</h2>
+<h2 id="8-threshold-rules-and-terminal-states">8. Threshold rules and terminal states<a class="headerlink" href="#8-threshold-rules-and-terminal-states" title="Permanent link">#</a></h2>
 <div class="tablewrap"><table>
 <thead>
 <tr>
@@ -342,7 +366,7 @@ change_type ∈ { STATE_TRANSITION, THRESHOLD_BREACH, STALENESS,
 </table></div>
 <p><strong>Terminal states:</strong> <code>success</code>, <code>no-op</code>, <code>blocked</code>, <code>stalled</code>, <code>exhausted</code>, <code>contested</code>.
 <strong>An error or an exhausted budget is never success.</strong></p>
-<h2 id="9-model-roles">9. Model roles</h2>
+<h2 id="9-model-roles">9. Model roles<a class="headerlink" href="#9-model-roles" title="Permanent link">#</a></h2>
 <p>Models are workers. They hold three jobs and no others.</p>
 <div class="tablewrap"><table>
 <thead>
@@ -390,7 +414,7 @@ change_type ∈ { STATE_TRANSITION, THRESHOLD_BREACH, STALENESS,
 
 <p>This runs <strong>once per criterion at authoring time</strong>, human-reviewed — not per turn, not unattended, not in the blocking path. Vendor split here mitigates the documented own-style judge bias; it is explicitly <strong>not</strong> claimed to add coverage, since ensembling was shown to reduce it.</p>
 <p><strong>Effort routing by stakes, not habit.</strong> The current <code>~/.codex/config.toml</code> default of <code>xhigh</code> globally is waste: overcorrection barely moves with reasoning effort (~5–10%). Low/medium for mechanical checks; high/max reserved for the hard maker turn and contested adjudication.</p>
-<h2 id="10-security">10. Security</h2>
+<h2 id="10-security">10. Security<a class="headerlink" href="#10-security" title="Permanent link">#</a></h2>
 <p>The current Codex configuration is:</p>
 <div class="codehilite"><pre><span></span><code><span class="n">approval_policy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;never&quot;</span>
 <span class="n">sandbox_mode</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;danger-full-access&quot;</span>
@@ -404,11 +428,11 @@ change_type ∈ { STATE_TRANSITION, THRESHOLD_BREACH, STALENESS,
 <li>Irreversible actions (deploy, merge to protected branch, delete, anything customer-facing) sit behind explicit human approval as graph nodes requiring an <code>escalates_to</code> traversal — the human checkpoint falls on the irreversible step, not the routine one.</li>
 <li><strong>Never write to the ticketing system</strong> — a standing operator constraint; those records are client-facing and read-only.</li>
 </ul>
-<h2 id="11-metrics">11. Metrics</h2>
+<h2 id="11-metrics">11. Metrics<a class="headerlink" href="#11-metrics" title="Permanent link">#</a></h2>
 <p><strong>Cost per accepted change</strong> — spend divided by closing deltas that survived staleness re-verification. The loop paper's proposed headline metric, and the number that reveals a loop burning budget while looking busy.</p>
 <p>Recorded per turn in <code>runs</code>. Reported per route (model × effort × work shape), which is what makes the routing table falsifiable against local data rather than published benchmarks.</p>
 <p>Secondary: open-criteria trajectory, unproven count, gate block/allow ratio, subagent no-op rate.</p>
-<h2 id="12-non-goals">12. Non-goals</h2>
+<h2 id="12-non-goals">12. Non-goals<a class="headerlink" href="#12-non-goals" title="Permanent link">#</a></h2>
 <ul>
 <li>Not a benchmark harness. Published scores inform the initial routing table and nothing else.</li>
 <li>Not multi-agent debate or judge ensembling — measured to reduce review quality.</li>
@@ -416,7 +440,7 @@ change_type ∈ { STATE_TRANSITION, THRESHOLD_BREACH, STALENESS,
 <li>Not a replacement for prompting. Loop and prompt are distinct tools.</li>
 <li>No loop where feedback does not change the next action. That is a scheduled one-shot; the authoring path must refuse to wrap it in machinery.</li>
 </ul>
-<h2 id="13-risks">13. Risks</h2>
+<h2 id="13-risks">13. Risks<a class="headerlink" href="#13-risks" title="Permanent link">#</a></h2>
 <div class="tablewrap"><table>
 <thead>
 <tr>
@@ -451,7 +475,7 @@ change_type ∈ { STATE_TRANSITION, THRESHOLD_BREACH, STALENESS,
 </tr>
 </tbody>
 </table></div>
-<h2 id="14-implementation-phasing">14. Implementation phasing</h2>
+<h2 id="14-implementation-phasing">14. Implementation phasing<a class="headerlink" href="#14-implementation-phasing" title="Permanent link">#</a></h2>
 <p>Too large for one plan. Each phase is independently useful and independently verifiable — and each is checked with its own criteria, so the system bootstraps on itself from P1 onward.</p>
 <div class="tablewrap"><table>
 <thead>
@@ -495,17 +519,36 @@ change_type ∈ { STATE_TRANSITION, THRESHOLD_BREACH, STALENESS,
 </tbody>
 </table></div>
 <p><strong>Every rule and guard must be watched to fail before it is trusted.</strong> A brake that has never been observed firing is <code>unproven</code>, and the system treats its own guards exactly as it treats criteria.</p>
-<h2 id="15-open-questions">15. Open questions</h2>
+<h2 id="15-open-questions">15. Open questions<a class="headerlink" href="#15-open-questions" title="Permanent link">#</a></h2>
 <ol>
 <li>Staleness window defaults per work shape — repo tests vs Argo sync vs ClickHouse freshness differ by orders of magnitude.</li>
 <li>Whether the Evidence Runner should be invokable by workers mid-turn (fast feedback) or only at gate time (stricter separation). Leaning mid-turn read-only, gate-time authoritative.</li>
 <li>Budget ceiling units — turns, tokens, or wall-clock. Likely tokens, to align with cost per accepted change.</li>
 </ol>
 <footer class="site">
-  loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
-  &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/design.md">edit this page</a>
+  MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a> &middot;
+  <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/design.md">edit this page</a>
 </footer>
 </main>
+<aside class="toc" aria-label="On this page"><div class="eyebrow">On this page</div>
+<ul>
+<li><a href="#1-problem">1. Problem</a></li>
+<li><a href="#2-evidence-base">2. Evidence base</a></li>
+<li><a href="#3-design-principles">3. Design principles</a></li>
+<li><a href="#4-architecture">4. Architecture</a></li>
+<li><a href="#5-data-model">5. Data model</a></li>
+<li><a href="#6-the-gate">6. The gate</a></li>
+<li><a href="#7-fan-out">7. Fan-out</a></li>
+<li><a href="#8-threshold-rules-and-terminal-states">8. Threshold rules and terminal states</a></li>
+<li><a href="#9-model-roles">9. Model roles</a></li>
+<li><a href="#10-security">10. Security</a></li>
+<li><a href="#11-metrics">11. Metrics</a></li>
+<li><a href="#12-non-goals">12. Non-goals</a></li>
+<li><a href="#13-risks">13. Risks</a></li>
+<li><a href="#14-implementation-phasing">14. Implementation phasing</a></li>
+<li><a href="#15-open-questions">15. Open questions</a></li>
+</ul>
+</aside>
 </div>
 </body>
 </html>

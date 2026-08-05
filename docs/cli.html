@@ -5,35 +5,59 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CLI and exit codes · loopgraph</title>
 <meta name="description" content="Three separate exit-code contracts, the command surface, and the three ways to invoke the same CLI.">
+<meta property="og:title" content="CLI and exit codes · loopgraph">
+<meta property="og:description" content="Three separate exit-code contracts, the command surface, and the three ways to invoke the same CLI.">
+<meta property="og:type" content="website">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/style.css">
+<script>
+(function () {
+  var k = 'loopgraph-theme', r = document.documentElement;
+  try { var s = localStorage.getItem(k); if (s) r.setAttribute('data-theme', s); } catch (e) {}
+  window.addEventListener('DOMContentLoaded', function () {
+    var b = document.getElementById('theme-toggle');
+    if (!b) return;
+    b.addEventListener('click', function () {
+      var dark = r.getAttribute('data-theme') === 'dark' ||
+        (!r.getAttribute('data-theme') &&
+         window.matchMedia('(prefers-color-scheme: dark)').matches);
+      var next = dark ? 'light' : 'dark';
+      r.setAttribute('data-theme', next);
+      try { localStorage.setItem(k, next); } catch (e) {}
+    });
+  });
+})();
+</script>
 </head>
 <body>
 <header class="masthead"><div class="inner">
   <a class="name" href="index.html">loopgraph</a>
   <span class="tag">Deterministic goal-state substrate for agent loops</span>
   <span class="spacer"></span>
-  <a class="gh" href="https://github.com/taylorsmithgg/loopgraph">GitHub</a>
+  <button class="util" id="theme-toggle" type="button"
+          aria-label="Switch between light and dark">theme</button>
+  <a class="util" href="https://github.com/taylorsmithgg/loopgraph">github</a>
 </div></header>
 <div class="wrap">
-<nav class="side">
+<nav class="side" aria-label="Sections">
 <ul>
 <li><a href="index.html">Overview</a></li>
 </ul>
-<h2>Guide</h2>
+<div class="eyebrow">Guide</div>
 <ul>
 <li><a href="cli.html" class="current">CLI &amp; exit codes</a></li>
 <li><a href="gates.html">Gates</a></li>
 <li><a href="memory.html">Memory</a></li>
 <li><a href="audit.html">Audit &amp; routing</a></li>
 </ul>
-<h2>Background</h2>
+<div class="eyebrow">Background</div>
 <ul>
 <li><a href="design.html">Design</a></li>
 <li><a href="coordination.html">Coordination design</a></li>
 <li><a href="implementation-plan.html">Implementation plan</a></li>
 <li><a href="followups.html">Open questions</a></li>
 </ul>
-<h2>Evidence</h2>
+<div class="eyebrow">Evidence</div>
 <ul>
 <li><a href="evidence/index.html">What was measured</a></li>
 <li><a href="evidence/corpus-baseline.html">Corpus baseline</a></li>
@@ -43,8 +67,8 @@
 </ul>
 </nav>
 <main>
-<h1 id="cli-and-exit-codes">CLI and exit codes</h1>
-<h2 id="exit-codes">Exit codes</h2>
+<h1 id="cli-and-exit-codes">CLI and exit codes<a class="headerlink" href="#cli-and-exit-codes" title="Permanent link">#</a></h1>
+<h2 id="exit-codes">Exit codes<a class="headerlink" href="#exit-codes" title="Permanent link">#</a></h2>
 <p>There is no single exit-code convention across these subcommands. There are
 three, and confusing them in a script or a hook is a real hazard.</p>
 <div class="tablewrap"><table>
@@ -96,7 +120,7 @@ a corrupt stored <code>expect</code>, and it <strong>outranks</strong> the succe
 containing one unevaluable criterion never reports 0, even if every other
 criterion closed. The write commands' exit 2 covers bad <code>--expect</code> JSON or
 value, an unknown <code>rel_type</code>, a duplicate id, an unknown foreign key.</p>
-<h2 id="keep-working-vs-stop-and-escalate">"Keep working" vs. "stop and escalate"</h2>
+<h2 id="keep-working-vs-stop-and-escalate">"Keep working" vs. "stop and escalate"<a class="headerlink" href="#keep-working-vs-stop-and-escalate" title="Permanent link">#</a></h2>
 <p>An exit code cannot tell you <em>why</em> <code>check</code> or <code>run</code> came back non-zero. Two
 very different situations share the same code:</p>
 <ul>
@@ -118,7 +142,7 @@ graph. Treat it as "stop" and you bail out of ordinary in-progress work. Only
 
 <p>Its values are <code>null</code> (keep working), <code>"success"</code>, <code>"stalled"</code>, <code>"exhausted"</code>,
 <code>"blocked"</code> and <code>"no-op"</code>.</p>
-<h2 id="command-surface">Command surface</h2>
+<h2 id="command-surface">Command surface<a class="headerlink" href="#command-surface" title="Permanent link">#</a></h2>
 <div class="codehilite"><pre><span></span><code>loopgraph on|off [--only scope|loop]     # both gates by default
 loopgraph status                         # criteria + gate state
 loopgraph claim &lt;agent&gt; --scope &lt;path|id&gt;...   # atomic, exit 3 on conflict
@@ -134,7 +158,7 @@ loopgraph fact add &lt;id&gt; --text &quot;...&quot; | brief   # traps to paste 
 loopgraph frontier &lt;agent&gt;                     # what a killed agent finished
 </code></pre></div>
 
-<h2 id="invoking-it">Invoking it</h2>
+<h2 id="invoking-it">Invoking it<a class="headerlink" href="#invoking-it" title="Permanent link">#</a></h2>
 <p>Three ways, all the same CLI:</p>
 <div class="codehilite"><pre><span></span><code>loopgraph status              # PATH shim -&gt; dist/loopgraph-shim.sh in ~/.local/bin
 /loopgraph status             # slash command -&gt; dist/slash-command.md in ~/.claude/commands
@@ -147,10 +171,11 @@ loopgraph is installed — so the same command reports different state per
 project. Installable copies of the shim and the slash command both live in
 <code>dist/</code>.</p>
 <footer class="site">
-  loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
-  &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/cli.md">edit this page</a>
+  MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a> &middot;
+  <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/cli.md">edit this page</a>
 </footer>
 </main>
+
 </div>
 </body>
 </html>

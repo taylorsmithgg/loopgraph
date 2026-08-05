@@ -5,35 +5,59 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Coordination design · loopgraph</title>
 <meta name="description" content="Scope claims, artifact deduplication and premise validation across parallel agents, with the benchmarks behind each.">
+<meta property="og:title" content="Coordination design · loopgraph">
+<meta property="og:description" content="Scope claims, artifact deduplication and premise validation across parallel agents, with the benchmarks behind each.">
+<meta property="og:type" content="website">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/style.css">
+<script>
+(function () {
+  var k = 'loopgraph-theme', r = document.documentElement;
+  try { var s = localStorage.getItem(k); if (s) r.setAttribute('data-theme', s); } catch (e) {}
+  window.addEventListener('DOMContentLoaded', function () {
+    var b = document.getElementById('theme-toggle');
+    if (!b) return;
+    b.addEventListener('click', function () {
+      var dark = r.getAttribute('data-theme') === 'dark' ||
+        (!r.getAttribute('data-theme') &&
+         window.matchMedia('(prefers-color-scheme: dark)').matches);
+      var next = dark ? 'light' : 'dark';
+      r.setAttribute('data-theme', next);
+      try { localStorage.setItem(k, next); } catch (e) {}
+    });
+  });
+})();
+</script>
 </head>
 <body>
 <header class="masthead"><div class="inner">
   <a class="name" href="index.html">loopgraph</a>
   <span class="tag">Deterministic goal-state substrate for agent loops</span>
   <span class="spacer"></span>
-  <a class="gh" href="https://github.com/taylorsmithgg/loopgraph">GitHub</a>
+  <button class="util" id="theme-toggle" type="button"
+          aria-label="Switch between light and dark">theme</button>
+  <a class="util" href="https://github.com/taylorsmithgg/loopgraph">github</a>
 </div></header>
-<div class="wrap">
-<nav class="side">
+<div class="wrap has-toc">
+<nav class="side" aria-label="Sections">
 <ul>
 <li><a href="index.html">Overview</a></li>
 </ul>
-<h2>Guide</h2>
+<div class="eyebrow">Guide</div>
 <ul>
 <li><a href="cli.html">CLI &amp; exit codes</a></li>
 <li><a href="gates.html">Gates</a></li>
 <li><a href="memory.html">Memory</a></li>
 <li><a href="audit.html">Audit &amp; routing</a></li>
 </ul>
-<h2>Background</h2>
+<div class="eyebrow">Background</div>
 <ul>
 <li><a href="design.html">Design</a></li>
 <li><a href="coordination.html" class="current">Coordination design</a></li>
 <li><a href="implementation-plan.html">Implementation plan</a></li>
 <li><a href="followups.html">Open questions</a></li>
 </ul>
-<h2>Evidence</h2>
+<div class="eyebrow">Evidence</div>
 <ul>
 <li><a href="evidence/index.html">What was measured</a></li>
 <li><a href="evidence/corpus-baseline.html">Corpus baseline</a></li>
@@ -43,12 +67,12 @@
 </ul>
 </nav>
 <main>
-<h1 id="agent-coordination-graph-design">Agent coordination graph — Design</h1>
+<h1 id="agent-coordination-graph-design">Agent coordination graph — Design<a class="headerlink" href="#agent-coordination-graph-design" title="Permanent link">#</a></h1>
 <p><strong>Date:</strong> 2026-08-03
 <strong>Status:</strong> Approved direction, pre-plan
 <strong>Supersedes in scope:</strong> nothing. Extends the P0+P1 substrate to a second entity family.</p>
 <hr />
-<h2 id="1-problem">1. Problem</h2>
+<h2 id="1-problem">1. Problem<a class="headerlink" href="#1-problem" title="Permanent link">#</a></h2>
 <p>From <code>docs/evidence/2026-08-03-subagent-failure-taxonomy.md</code>, measured over a 10,920-line session with 35 agents and 26.5 agent-days of wall clock:</p>
 <div class="tablewrap"><table>
 <thead>
@@ -88,7 +112,7 @@
 </table></div>
 <p>The dominant failure is A. A 9.6-day agent returned a plan for a retirement that had completed seven days earlier. Its measurements were sound when taken; the conclusions drawn from them expired.</p>
 <p><strong>This is a stale-read problem.</strong> That is the framing the rest of the design follows.</p>
-<h2 id="2-what-already-exists">2. What already exists</h2>
+<h2 id="2-what-already-exists">2. What already exists<a class="headerlink" href="#2-what-already-exists" title="Permanent link">#</a></h2>
 <p>P0+P1 shipped a general graph substrate, currently used only for <code>criterion</code> nodes:</p>
 <ul>
 <li><code>nodes(id, type, …)</code> — <code>type</code> is free text; only <code>add_criterion</code> hardcodes <code>'criterion'</code>.</li>
@@ -98,7 +122,7 @@
 <li>Measured cost: derivation is ~0.09 ms per node, roughly linear.</li>
 </ul>
 <p>Nothing here needs replacing. The clock is a version counter and the delta log is a change stream — which is precisely what the coordination problem needs.</p>
-<h2 id="3-design-principles">3. Design principles</h2>
+<h2 id="3-design-principles">3. Design principles<a class="headerlink" href="#3-design-principles" title="Permanent link">#</a></h2>
 <ol>
 <li><strong>Staleness is a version check, never a judgment.</strong> No model participates in deciding whether an agent's conclusions expired.</li>
 <li><strong>Pull is free; push is expensive.</strong> Validation costs one indexed query in the controller's context. A relay costs tokens in the agent's context. Push is an optimization to be justified, not a default.</li>
@@ -108,7 +132,7 @@
 <li><strong>Agents propose; a neutral steward applies.</strong> No agent holds write authority over a shared surface. Adopted from ATM (arXiv 2607.00041) — see §3.1.</li>
 <li><strong>Invalidate on content, not on activity.</strong> A read is stale only when the content it depended on changed, not when anything nearby moved. See §5.1.</li>
 </ol>
-<h3 id="31-relation-to-prior-art">3.1 Relation to prior art</h3>
+<h3 id="31-relation-to-prior-art">3.1 Relation to prior art<a class="headerlink" href="#31-relation-to-prior-art" title="Permanent link">#</a></h3>
 <p>This design is not novel in kind. See <code>docs/evidence/2026-08-03-prior-art-review.md</code> for the full survey; the load-bearing points:</p>
 <ul>
 <li><strong>ATM</strong> (arXiv 2607.00041) governs pre-write admission within a single worktree or filesystem domain, using a Task Contract <code>⟨g, A, F, S, D, V, E, ε⟩</code>, atom maps, content identifiers and a neutral steward. Its <code>V</code>/<code>D</code>/<code>E</code> plane — validation commands, deliverables, evidence obligations — is what loopgraph P0+P1 already implements. <strong>We adopt three of its mechanisms (§3.1a) and decline the rest</strong>, because ATM explicitly excludes "cross-machine clones, remote branches, or PR-level distributed coordination", which is where every failure in our taxonomy occurred.</li>
@@ -116,7 +140,7 @@
 <li><strong>Blackboard architecture</strong> (Hearsay-II, Linda tuple spaces) is the correct name for what earlier drafts of this document called pub/sub: agents coordinate indirectly through shared structured state rather than by messaging. Used throughout.</li>
 <li><strong>AgenticFlict</strong>, cited by ATM, reports a <strong>27.67% merge-conflict rate across 142,000 AI-agent pull requests</strong>. External evidence the problem is real at a scale our own 2,674-completion corpus cannot establish.</li>
 </ul>
-<h4 id="31a-mechanisms-adopted-from-atm">3.1a Mechanisms adopted from ATM</h4>
+<h4 id="31a-mechanisms-adopted-from-atm">3.1a Mechanisms adopted from ATM<a class="headerlink" href="#31a-mechanisms-adopted-from-atm" title="Permanent link">#</a></h4>
 <div class="tablewrap"><table>
 <thead>
 <tr>
@@ -143,7 +167,7 @@
 </tr>
 </tbody>
 </table></div>
-<h2 id="4-entity-model">4. Entity model</h2>
+<h2 id="4-entity-model">4. Entity model<a class="headerlink" href="#4-entity-model" title="Permanent link">#</a></h2>
 <p>New node types on the existing table:</p>
 <div class="tablewrap"><table>
 <thead>
@@ -218,16 +242,16 @@
 </tbody>
 </table></div>
 <p>New change types: <code>SCOPE_CLAIMED</code>, <code>SCOPE_CONFLICT</code>, <code>RELAY_SENT</code>, <code>STALE_ON_RETURN</code>, <code>EPOCH_ADVANCED</code>, <code>WRITE_PROPOSED</code>, <code>WRITE_APPLIED</code>.</p>
-<h3 id="41-the-neutral-steward">4.1 The neutral steward</h3>
+<h3 id="41-the-neutral-steward">4.1 The neutral steward<a class="headerlink" href="#41-the-neutral-steward" title="Permanent link">#</a></h3>
 <p>Agents never apply a governed write. An agent emits a <code>WRITE_PROPOSED</code> delta describing the intended change; the steward validates it against the proposer's scope, epoch and base hash, and only then applies it and emits <code>WRITE_APPLIED</code>.</p>
 <p>This separates <em>who proposes a change</em> from <em>who performs it</em>. The practical consequence for our taxonomy: a stale or out-of-scope proposal is rejected at apply time by a party that has current state, rather than discovered after an agent has already written and opened an MR — which is how !515 reached review with four duplicate rules.</p>
 <p><strong>Scope of the steward.</strong> It governs <em>shared surfaces only</em> — artifacts, slots and identifiers declared in <code>scope_of</code>. An agent's private work-in-progress inside its own worktree is untouched; requiring every local edit to traverse a broker would be unusable. The steward is the apply authority at the boundary where work becomes shared.</p>
 <p><strong>Degradation.</strong> Where a steward cannot mediate — an agent pushing directly to a remote, an external actor merging — the write is observed after the fact via §9 external ingestion and recorded as <code>WRITE_APPLIED</code> with no matching <code>WRITE_PROPOSED</code>. That asymmetry is itself a detectable signal: ungoverned writes are visible as such rather than silently indistinguishable.</p>
-<h3 id="42-direction-epochs">4.2 Direction epochs</h3>
+<h3 id="42-direction-epochs">4.2 Direction epochs<a class="headerlink" href="#42-direction-epochs" title="Permanent link">#</a></h3>
 <p>Every goal carries an epoch. If the goal statement or the scope set changes, the epoch advances and an <code>EPOCH_ADVANCED</code> delta is written.</p>
 <p>An agent records the epoch it was dispatched under. A proposal carrying a superseded epoch is refused by the steward, and the agent is culled or relayed per §7.1. This closes a gap our earlier drafts had no answer for: !515's MR was rejected partly because "its premise may now be wrong" — the runbook asked eight tenants to enable a setting the data showed was already enabled. That is direction drift, not staleness of a specific read, and a clock comparison would not have caught it.</p>
-<h2 id="5-the-two-paths">5. The two paths</h2>
-<h3 id="51-pull-validate-on-return-always">5.1 Pull — validate on return (always)</h3>
+<h2 id="5-the-two-paths">5. The two paths<a class="headerlink" href="#5-the-two-paths" title="Permanent link">#</a></h2>
+<h3 id="51-pull-validate-on-return-always">5.1 Pull — validate on return (always)<a class="headerlink" href="#51-pull-validate-on-return-always" title="Permanent link">#</a></h3>
 <p>When an agent stops, before its output is accepted, validation runs in two stages. Both are indexed queries; neither involves a model.</p>
 <p><strong>Stage 1 — cheap filter on the clock.</strong> Find the scope entities that saw <em>any</em> delta while the agent ran:</p>
 <div class="codehilite"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="k">DISTINCT</span><span class="w"> </span><span class="n">entity_id</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">deltas</span>
@@ -243,7 +267,7 @@
 <p><strong>Epoch check.</strong> Independently of content, an agent dispatched under a superseded epoch (§4.2) is invalid regardless of hashes: its goal changed underneath it.</p>
 <p>Conclusions failing either check are quarantined rather than merged (§7.3). This path runs for <strong>every</strong> agent regardless of lifetime, because it is effectively free — stage 1 is one indexed query, and stage 2 touches only its output.</p>
 <p><strong>Cost note.</strong> Stage 2 requires reading current content for candidate entities, which is the one place validation is not purely a database operation. Bounding it is why stage 1 exists: in a quiet session the candidate set is empty and no content is read at all.</p>
-<h3 id="52-push-relay-while-the-agent-can-still-act-deferred-not-in-first-implementation">5.2 Push — relay while the agent can still act — DEFERRED, not in first implementation</h3>
+<h3 id="52-push-relay-while-the-agent-can-still-act-deferred-not-in-first-implementation">5.2 Push — relay while the agent can still act — DEFERRED, not in first implementation<a class="headerlink" href="#52-push-relay-while-the-agent-can-still-act-deferred-not-in-first-implementation" title="Permanent link">#</a></h3>
 <p><strong>Measurement changed this decision.</strong> See <code>docs/evidence/2026-08-03-mechanism-benchmarks.md</code> §4. Summary of why push is not built first:</p>
 <ul>
 <li>Pull (§5.1) already detects <strong>100%</strong> of staleness, for one indexed query and zero tokens. Push adds no detection.</li>
@@ -252,7 +276,7 @@
 <li>The delivery hole is real: the probe showed a queued relay is silently lost if the agent stops before its next tool round.</li>
 </ul>
 <p>Revisit only if measurement shows agents doing substantial work <em>after</em> their premises break. The design below is retained for that case.</p>
-<h4 id="52a-design-if-revisited">5.2a Design, if revisited</h4>
+<h4 id="52a-design-if-revisited">5.2a Design, if revisited<a class="headerlink" href="#52a-design-if-revisited" title="Permanent link">#</a></h4>
 <p>Measured delivery semantics (probe, this session):</p>
 <div class="tablewrap"><table>
 <thead>
@@ -287,7 +311,7 @@
 
 <p>Requires an index on <code>edges(dst, rel_type)</code> — the only schema addition.</p>
 <p>Then <strong>coalesce before sending</strong>: group by agent, dedupe by <code>entity_id</code>, keep the latest state per entity. Twenty deltas during one agent's run become one message listing the entities that moved. This is log compaction, and it is what keeps relay cost bounded as fan-out grows.</p>
-<h2 id="6-how-each-failure-closes">6. How each failure closes</h2>
+<h2 id="6-how-each-failure-closes">6. How each failure closes<a class="headerlink" href="#6-how-each-failure-closes" title="Permanent link">#</a></h2>
 <div class="tablewrap"><table>
 <thead>
 <tr>
@@ -319,9 +343,9 @@
 </tbody>
 </table></div>
 <p>Two mechanisms carry more than one category. The <strong>steward</strong> (§4.1) is the apply-time gate for B and the enforcement point for the epoch check in A. The <strong>epoch</strong> (§4.2) covers a failure mode no clock or hash detects: !515's premise was invalidated not because its reads changed but because the goal it was pursuing had been shown unnecessary.</p>
-<h2 id="7-agent-lifecycle-culling-and-replacement">7. Agent lifecycle: culling and replacement</h2>
+<h2 id="7-agent-lifecycle-culling-and-replacement">7. Agent lifecycle: culling and replacement<a class="headerlink" href="#7-agent-lifecycle-culling-and-replacement" title="Permanent link">#</a></h2>
 <p>The evidence demands this section. Nine agents were killed simultaneously by a weekly quota; three background tasks were orphaned with <strong>no completion record</strong> ("these leave no transcript marker"); one agent "died mid-reconciliation"; five ran past 24 hours. Death is common, unobservable, and currently loses everything in flight.</p>
-<h3 id="71-cull-triggers">7.1 Cull triggers</h3>
+<h3 id="71-cull-triggers">7.1 Cull triggers<a class="headerlink" href="#71-cull-triggers" title="Permanent link">#</a></h3>
 <p>All six are decided by query. No model participates.</p>
 <div class="tablewrap"><table>
 <thead>
@@ -358,15 +382,15 @@
 </tbody>
 </table></div>
 <p>Order of response for a stale premise: <strong>relay first, cull second.</strong> A long-running agent that can still act is told what moved and may abort itself, which preserves the independent-convergence effect the taxonomy records as genuine validation. Culling is for agents that are unreachable, unresponsive, or whose premise is fatally invalidated.</p>
-<h3 id="72-claims-are-leases-not-locks">7.2 Claims are leases, not locks</h3>
+<h3 id="72-claims-are-leases-not-locks">7.2 Claims are leases, not locks<a class="headerlink" href="#72-claims-are-leases-not-locks" title="Permanent link">#</a></h3>
 <p>An agent that dies holding <code>sql/57</code> must not poison that slot forever. Claims are <strong>leases with a TTL</strong>, the same reason ZooKeeper and Chubby use ephemeral nodes.</p>
 <p><strong>Lease validity is derived, not stored.</strong> The <code>claims</code> edge carries no expiry column. An agent node has <code>heartbeat_at</code>; a claim is valid exactly while <code>now - heartbeat_at &lt; lease_ttl</code>. This needs no schema change to <code>edges</code>, and it keeps the design's rule that state is derived rather than cached.</p>
 <p><strong>Expiry is lazy.</strong> There is no background sweeper and no periodic scan. A lapsed lease is discovered when someone next tries to claim that slot — evaluated at claim time, like lazy TTL eviction. The reclaim is written as a <code>SCOPE_RECLAIMED</code> delta so it is auditable rather than silent.</p>
 <p><strong>Heartbeat is explicit</strong>, not inferred from work. Inferring liveness from delta writes would falsely cull an agent legitimately blocked in a forty-minute build. The agent touches its own node; the TTL is generous and renewable. Default <code>lease_ttl</code> 30 minutes.</p>
-<h3 id="73-quarantine">7.3 Quarantine</h3>
+<h3 id="73-quarantine">7.3 Quarantine<a class="headerlink" href="#73-quarantine" title="Permanent link">#</a></h3>
 <p>A culled agent's output is marked <code>quarantined</code> and <strong>never auto-merges</strong>. This is precisely what !515 needed and did not have: four duplicate rules reached MR state and were caught only by human review on return.</p>
 <p>Quarantine is a state on the artifacts, recorded by delta. Nothing is deleted — the work is preserved for triage.</p>
-<h3 id="74-succession">7.4 Succession</h3>
+<h3 id="74-succession">7.4 Succession<a class="headerlink" href="#74-succession" title="Permanent link">#</a></h3>
 <p>A replacement is generation N+1, linked by a <code>succeeds</code> edge, and inherits:</p>
 <ul>
 <li><strong>Scope</strong> — <code>scope_of</code> edges retargeted to the successor.</li>
@@ -375,7 +399,7 @@
 <li><strong>The completion frontier.</strong> The successor reads the delta log to see what its predecessor actually finished, and starts from there.</li>
 </ul>
 <p>That last point is the whole value. The nine quota-killed agents were relaunched from scratch because nothing recorded partial completion. With deltas written as work lands, a successor resumes instead of restarting.</p>
-<h3 id="75-cost">7.5 Cost</h3>
+<h3 id="75-cost">7.5 Cost<a class="headerlink" href="#75-cost" title="Permanent link">#</a></h3>
 <div class="tablewrap"><table>
 <thead>
 <tr>
@@ -402,12 +426,12 @@
 </tr>
 </tbody>
 </table></div>
-<h2 id="8-write-set-conflict-classes-parallel-vs-serial-decided-before-dispatch">8. Write-set conflict classes — parallel vs serial, decided before dispatch</h2>
-<h3 id="81-the-case">8.1 The case</h3>
+<h2 id="8-write-set-conflict-classes-parallel-vs-serial-decided-before-dispatch">8. Write-set conflict classes — parallel vs serial, decided before dispatch<a class="headerlink" href="#8-write-set-conflict-classes-parallel-vs-serial-decided-before-dispatch" title="Permanent link">#</a></h2>
+<h3 id="81-the-case">8.1 The case<a class="headerlink" href="#81-the-case" title="Permanent link">#</a></h3>
 <p>Observed live, 2026-08-03: three MRs — !535 (API Activity), !539 (inventory), !543 (Process/Script) — all touch the same three files, so every merge re-conflicts the others. Two more, !541 and !542, are independent and run clean.</p>
 <p>The manual workaround was an explicit one-at-a-time handshake: the agent rebases one, reports, the controller merges, the controller tells it the new <code>main</code> SHA, repeat. Without it, "rebasing all three against one base means two are stale before I can land them — which already happened once."</p>
 <p>Both halves of that are computable rather than discovered.</p>
-<h3 id="82-conflict-classes">8.2 Conflict classes</h3>
+<h3 id="82-conflict-classes">8.2 Conflict classes<a class="headerlink" href="#82-conflict-classes" title="Permanent link">#</a></h3>
 <p>Each agent declares a <strong>write-set</strong> at dispatch: the paths and artifacts it intends to modify. A conflict class is a connected component over write-set intersection.</p>
 <ul>
 <li>Agents in the same class <strong>must serialize</strong> — one holds the class's merge token at a time.</li>
@@ -415,7 +439,7 @@
 </ul>
 <p>For the case above: <code>{!535, !539, !543}</code> is one class; <code>{!541}</code> and <code>{!542}</code> are singletons. The partition is a set intersection over declared write-sets — no model, no heuristics, and computed once at dispatch rather than rediscovered at each rebase.</p>
 <p>This is the scheduling decision the taxonomy's category C failures were paying for at the wrong time: !506 vs !510 both claiming <code>sql/57</code> was a write-set intersection nobody computed.</p>
-<h3 id="83-landing-order-is-not-ours-to-build">8.3 Landing order is not ours to build</h3>
+<h3 id="83-landing-order-is-not-ours-to-build">8.3 Landing order is not ours to build<a class="headerlink" href="#83-landing-order-is-not-ours-to-build" title="Permanent link">#</a></h3>
 <p>Serial rebase-on-result is a merge queue, and GitLab implements it as Merge Trains (availability is tier-dependent). Rebuilding it would repeat the mistake of reimplementing pytest.</p>
 <div class="tablewrap"><table>
 <thead>
@@ -440,10 +464,10 @@
 </tbody>
 </table></div>
 <p>Where a merge train is unavailable, the class's merge token degrades to exactly the manual handshake — but driven by the graph rather than by a human relaying SHAs.</p>
-<h3 id="84-what-the-relay-removes">8.4 What the relay removes</h3>
+<h3 id="84-what-the-relay-removes">8.4 What the relay removes<a class="headerlink" href="#84-what-the-relay-removes" title="Permanent link">#</a></h3>
 <p>"I tell it the new main SHA" becomes: <code>main</code> is a node, a merge writes a delta, and every agent whose <code>scope_of</code> intersects the affected class receives it at its next tool round (measured: one tool round). The controller stops being a message bus for SHAs and remains the authority on what merges.</p>
 <p><strong>Honest limit:</strong> if three MRs genuinely must touch the same three files, they still serialize. The graph does not remove the conflict. It removes paying to discover it once per MR, and it stops the queued agents working against a base that is already dead.</p>
-<h3 id="85-acquisition-is-atomic-and-scope-is-three-level">8.5 Acquisition is atomic, and scope is three-level</h3>
+<h3 id="85-acquisition-is-atomic-and-scope-is-three-level">8.5 Acquisition is atomic, and scope is three-level<a class="headerlink" href="#85-acquisition-is-atomic-and-scope-is-three-level" title="Permanent link">#</a></h3>
 <p><strong>All-or-nothing.</strong> An agent acquires its entire scope in a single <code>BEGIN IMMEDIATE</code> transaction: every <code>claims</code> edge is inserted, or none is. Partial acquisition is never observable.</p>
 <p>This is not tidiness. Incremental acquisition permits hold-and-wait — agent A holds file 1 and waits for file 2 while agent B holds file 2 and waits for file 1. Hold-and-wait is one of the four conditions deadlock requires, so removing it makes deadlock <strong>impossible by construction</strong>. No lock-ordering protocol, no deadlock detector, no timeout-and-retry storms, no backoff tuning. A failed acquisition rolls back whole and the agent is simply not dispatched yet.</p>
 <p><strong>Three levels, claimed together.</strong> Textual overlap is not the same as similarity, and the taxonomy has one failure of each kind:</p>
@@ -475,7 +499,7 @@
 </table></div>
 <p>A path-only partition would have cleared !515 to run in parallel, and it would still have shipped four duplicate rules. The semantic level is the only one that catches category B.</p>
 <p>Each level is a <code>slot</code> node; a scope is the union across levels; acquisition is atomic over that union.</p>
-<h3 id="86-where-semantic-keys-come-from-measured">8.6 Where semantic keys come from — measured</h3>
+<h3 id="86-where-semantic-keys-come-from-measured">8.6 Where semantic keys come from — measured<a class="headerlink" href="#86-where-semantic-keys-come-from-measured" title="Permanent link">#</a></h3>
 <p>Measured 2026-08-03 across 9 repositories and 6 project types (Go, TypeScript, Python, YAML/Helm, Terraform, SQL).</p>
 <div class="tablewrap"><table>
 <thead>
@@ -612,14 +636,14 @@
 </table></div>
 <p><strong>Honest limits.</strong> The 4.4 % figure is one corpus of 136 objects, and the vendor vocabulary used was written against that corpus, so it fits it by construction. The vocabulary is a small declared list per project — cheap to maintain, but its quality bounds the result. Where no vocabulary exists, treat semantic keys as <strong>absent rather than guessed</strong>: the partition degrades to paths and identifiers, and says so.</p>
 <p><strong>No model participates.</strong> Vocabulary membership is a set lookup. This keeps an unreliable verdict out of a blocking mechanism, for the same reason model judgement stays out of staleness.</p>
-<h2 id="9-external-change-ingestion">9. External change ingestion</h2>
+<h2 id="9-external-change-ingestion">9. External change ingestion<a class="headerlink" href="#9-external-change-ingestion" title="Permanent link">#</a></h2>
 <p>The legacy-pipeline retirement was performed outside any agent, so nothing would have published it. External sources are polled incrementally against a stored <strong>watermark</strong>, never rescanned:</p>
 <ul>
 <li>GitLab: <code>updated_after=&lt;last_seen&gt;</code> per project, watermark in <code>meta</code>.</li>
 <li>Git: <code>git log &lt;last_seen_sha&gt;..HEAD --name-only</code>, watermark is the SHA.</li>
 </ul>
 <p>Each poll writes deltas for the artifacts it touched, which then flow through §5 unchanged. Polling is incremental by construction; cost is proportional to what changed, not to repository size.</p>
-<h2 id="10-efficiency-budget">10. Efficiency budget</h2>
+<h2 id="10-efficiency-budget">10. Efficiency budget<a class="headerlink" href="#10-efficiency-budget" title="Permanent link">#</a></h2>
 <div class="tablewrap"><table>
 <thead>
 <tr>
@@ -672,14 +696,14 @@
 </tbody>
 </table></div>
 <p><strong>The rule that governs all of it:</strong> a mechanism that spends agent context tokens must be justified against the work it saves. Everything that can be answered with a query is answered with a query.</p>
-<h2 id="11-non-goals">11. Non-goals</h2>
+<h2 id="11-non-goals">11. Non-goals<a class="headerlink" href="#11-non-goals" title="Permanent link">#</a></h2>
 <ul>
 <li>No Proactivity Scorer or ranking. Relevance is exact set membership in <code>scope_of</code>, not a weighted score.</li>
 <li>No second datastore, no message broker. The delta log is the stream; edges are the routing table.</li>
 <li>No suppression of independent overlap. The taxonomy's NOT-failures section records that three agents hitting one bug was "the system working" and that independent convergence validated design decisions. Only <em>collisions</em> and <em>stale premises</em> are targets.</li>
 <li>No model in the staleness path.</li>
 </ul>
-<h2 id="12-open-questions">12. Open questions</h2>
+<h2 id="12-open-questions">12. Open questions<a class="headerlink" href="#12-open-questions" title="Permanent link">#</a></h2>
 <ol>
 <li><strong>Vendor vocabulary coverage.</strong> §8.6 measured 4.4 % collision with 0 false groups on a 136-object SQL corpus, but the vocabulary was written against that corpus. Measure against a second project type — K8s manifests are the obvious next one — before treating the number as general.</li>
 <li><strong>Merge train availability.</strong> §8.3 delegates landing order to GitLab Merge Trains, which are tier-dependent. Confirm availability on the target projects; where absent, the class merge token degrades to a graph-driven handshake.</li>
@@ -694,10 +718,26 @@
 <li><em>Culled work</em> — §7.3: quarantined, never auto-merged, triaged by the successor.</li>
 </ul>
 <footer class="site">
-  loopgraph &middot; MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a>
-  &middot; <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/coordination.md">edit this page</a>
+  MIT &middot; <a href="https://github.com/taylorsmithgg/loopgraph">source</a> &middot;
+  <a href="https://github.com/taylorsmithgg/loopgraph/blob/main/docs-src/coordination.md">edit this page</a>
 </footer>
 </main>
+<aside class="toc" aria-label="On this page"><div class="eyebrow">On this page</div>
+<ul>
+<li><a href="#1-problem">1. Problem</a></li>
+<li><a href="#2-what-already-exists">2. What already exists</a></li>
+<li><a href="#3-design-principles">3. Design principles</a></li>
+<li><a href="#4-entity-model">4. Entity model</a></li>
+<li><a href="#5-the-two-paths">5. The two paths</a></li>
+<li><a href="#6-how-each-failure-closes">6. How each failure closes</a></li>
+<li><a href="#7-agent-lifecycle-culling-and-replacement">7. Agent lifecycle: culling and replacement</a></li>
+<li><a href="#8-write-set-conflict-classes-parallel-vs-serial-decided-before-dispatch">8. Write-set conflict classes — parallel vs serial, decided before dispatch</a></li>
+<li><a href="#9-external-change-ingestion">9. External change ingestion</a></li>
+<li><a href="#10-efficiency-budget">10. Efficiency budget</a></li>
+<li><a href="#11-non-goals">11. Non-goals</a></li>
+<li><a href="#12-open-questions">12. Open questions</a></li>
+</ul>
+</aside>
 </div>
 </body>
 </html>
