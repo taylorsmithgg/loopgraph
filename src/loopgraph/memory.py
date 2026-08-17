@@ -102,6 +102,12 @@ _TOKEN_PATTERN = (
     # one fixed-width lookbehind each: Python will not take an alternation of
     # differing widths in a single one.
     + "".join(rf"(?<!{w} )" for w in _TOKEN_MEASURE_WORDS)
+    # A count is never a credential. "123 tokens", "~50k tokens", "2M tokens":
+    # the qualifier form was covered first and this bare one was not, so a
+    # memory saying "the brief costs ~123 tokens" was still filed as
+    # credential material. Two chars of fixed-width lookbehind is enough --
+    # only the digit or magnitude suffix immediately before the space matters.
+    + r"(?<![\dkKmMbB] )"
     # Ordered alternation: "tokens" / a bare "token" / "token_url", but never
     # "tokenizer" -- no word boundary after "token" there, and "i" is not a
     # separator, so every branch correctly fails.

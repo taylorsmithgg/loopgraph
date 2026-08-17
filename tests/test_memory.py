@@ -602,6 +602,9 @@ def test_credential_token_still_classifies(text):
     "the tokenizer is the slow part",
     "budget the run at 50k tokens/turn",
     "token count is the wrong metric here",
+    "the brief costs ~123 tokens at session start",
+    "budget 50k tokens for the sweep",
+    "2M tokens across the corpus",
 ])
 def test_measured_tokens_are_not_credentials(text):
     from loopgraph.memory import sensitivity
