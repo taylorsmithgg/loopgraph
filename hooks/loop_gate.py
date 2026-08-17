@@ -59,6 +59,12 @@ def main() -> int:
         # of as a gate that mysteriously stopped gating.
         from loopgraph.db import meta_set
         meta_set(conn, "last_gate_session", coord.session_key())
+        # Per-session proof that the hook and the CLI compute the same key.
+        # The shared slot above is last-writer-wins across every session in
+        # this db, so on its own it cannot tell "our gate disagrees" from
+        # "a sibling stopped after us".
+        meta_set(conn, "gate_seen:" + (coord.session_key() or "-"), "1")
+        meta_set(conn, "gate_seen_any", "1")
 
         # `stop_hook_active` is true only while the harness is ALREADY
         # continuing because a stop hook blocked - it is the loop guard, not

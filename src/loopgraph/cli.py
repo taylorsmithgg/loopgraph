@@ -49,9 +49,28 @@ def _gate_line(conn, db) -> str:
     gate_saw = meta_get(conn, "last_gate_session", None)
     # A disagreement here means everything the CLI stamps looks foreign to
     # the Stop hook, i.e. the gate quietly stops gating. Say it, loudly.
-    mismatch = ("  MISMATCH: the Stop hook sees "
-                f"{gate_saw or '(none)'} - criteria added here will not bind it"
-                if gate_saw is not None and gate_saw != coord.session_key() else "")
+    #
+    # But `last_gate_session` is one slot and $HOME is not a git repo, so
+    # every session working there shares this db: the slot holds whichever
+    # SIBLING stopped most recently, not evidence about us. Comparing
+    # against it alone cried MISMATCH -- "criteria added here will not bind
+    # it" -- at a session whose identity was in fact perfectly consistent,
+    # and sent a reader hunting an identity bug that did not exist. A
+    # diagnostic that lies costs more than one that is silent.
+    #
+    # `gate_seen:<key>` is per-session, so our own gate having run is proof
+    # the two agree, whoever stamped the shared slot afterwards.
+    proven = meta_get(conn, "gate_seen:" + (coord.session_key() or "-"), None)
+    if proven is not None or gate_saw is None or gate_saw == coord.session_key():
+        mismatch = ""
+    elif meta_get(conn, "gate_seen_any", None) is None:
+        mismatch = ""                      # no gate has ever run here; nothing to compare
+    else:
+        # Unverified, not broken: another session's gate ran here and ours
+        # has not stopped yet, so we cannot yet know whether the keys agree.
+        mismatch = (f"  (a sibling session's gate ran here last: {gate_saw}; "
+                    "this session has not stopped yet, so key agreement is "
+                    "unverified - re-check after one stop)")
     return (f"gates: scope={sc} loop={lp}{note}\n"
             f"session: {mine}{mismatch}\ndb: {db}")
 

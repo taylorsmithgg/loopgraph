@@ -229,3 +229,35 @@ def test_loose_note_carries_age(gate):
     _foreign_criterion(gate.db)
     _, out = gate(stop_hook_active=False)
     assert "d old" in out.get("systemMessage", "")
+
+
+def test_status_stays_quiet_when_a_sibling_stopped_last(gate, monkeypatch):
+    """$HOME is not a git repo, so every session there shares one db and
+    `last_gate_session` holds whoever stopped most recently. Comparing against
+    it alone reported MISMATCH -- "criteria added here will not bind it" -- at
+    a session whose identity was fine, and sent a reader after a bug that did
+    not exist."""
+    from loopgraph.cli import _gate_line
+    gate(stop_hook_active=False)                    # our own gate runs: proof
+    conn = open_db(gate.db)
+    meta_set(conn, "last_gate_session", "some-sibling-session")
+    assert "MISMATCH" not in _gate_line(conn, gate.db)
+
+
+def test_status_says_unverified_before_this_session_has_stopped(gate):
+    """Not yet provable is not the same as broken, and must not be worded as
+    though the gate has stopped gating."""
+    from loopgraph.cli import _gate_line
+    conn = open_db(gate.db)
+    meta_set(conn, "gate_seen_any", "1")
+    meta_set(conn, "last_gate_session", "some-sibling-session")
+    line = _gate_line(conn, gate.db)
+    assert "unverified" in line
+    assert "will not bind" not in line
+
+
+def test_status_is_silent_when_no_gate_has_ever_run(gate):
+    from loopgraph.cli import _gate_line
+    conn = open_db(gate.db)
+    meta_set(conn, "last_gate_session", "some-sibling-session")
+    assert "MISMATCH" not in _gate_line(conn, gate.db)
