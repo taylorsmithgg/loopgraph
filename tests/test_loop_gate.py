@@ -189,3 +189,43 @@ def test_the_gate_stays_under_the_harness_ceiling(gate, monkeypatch):
     _criterion(gate.db, cmd="false")
     from loopgraph import coord
     assert coord.max_blocks() < int(os.environ["CLAUDE_CODE_STOP_HOOK_BLOCK_CAP"])
+
+
+def _foreign_criterion(db, cid="C1", cmd="false"):
+    """Open, and owned by a session that is not this one -- the shape that
+    produced 998 repeats of the same note across this machine."""
+    conn = open_db(db)
+    add_criterion(conn, cid, f"{cid} holds", cmd, {})
+    coord.set_node_flags(conn, cid, session="some-dead-session")
+    return conn
+
+
+def test_loose_note_is_said_once_not_every_stop(gate):
+    """The nag that could not be ended. With no criteria of our own, this
+    path runs on EVERY stop of a long session; unsuppressed it repeated the
+    same two ids 432 times in one real session and changed nothing."""
+    _foreign_criterion(gate.db)
+    _, first = gate(stop_hook_active=False)
+    assert "NOT enforced" in first.get("systemMessage", "")
+    for _ in range(5):
+        _, again = gate(stop_hook_active=False)
+        assert again == {}, "the loose note repeated on a later stop"
+
+
+def test_loose_note_speaks_again_when_the_set_changes(gate):
+    """Suppression is keyed by the set, not by 'said once ever'. A NEW
+    unenforced criterion is news, or silence becomes the old bug again."""
+    _foreign_criterion(gate.db, "C1")
+    _, first = gate(stop_hook_active=False)
+    assert "C1" in first.get("systemMessage", "")
+    _foreign_criterion(gate.db, "C2")
+    _, second = gate(stop_hook_active=False)
+    assert "C2" in second.get("systemMessage", "")
+
+
+def test_loose_note_carries_age(gate):
+    """adopt-or-drop is undecidable from the id alone: an hour-old criterion
+    from a live sibling reads differently from a three-week-old orphan."""
+    _foreign_criterion(gate.db)
+    _, out = gate(stop_hook_active=False)
+    assert "d old" in out.get("systemMessage", "")

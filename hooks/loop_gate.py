@@ -104,7 +104,11 @@ def main() -> int:
         loose = coord.unenforced_criteria(conn)
 
         if not crits:
-            if loose:
+            # Once per set, not once per stop. This is the path a long
+            # session with no criteria of its own takes on EVERY turn, and
+            # unsuppressed it is where 432 of one session's repeats came
+            # from. `loose_note_due` speaks again as soon as the set changes.
+            if loose and coord.loose_note_due(conn, loose):
                 print(json.dumps({"systemMessage": _loose_note(loose)}))
             return 0                               # nothing of ours; not silent
         tick(conn)                                 # turn counter feeds R-01
@@ -137,16 +141,21 @@ def main() -> int:
     if ts == "success":
         coord.clear_blocks(conn)
         if loose:
-            # Success here means "everything this session signed up for".
-            # Saying it while something else sits open, unsaid, is how a
-            # green light starts meaning nothing.
+            # Deliberately NOT deduped. Success here means "everything this
+            # session signed up for". Saying it while something else sits
+            # open, unsaid, is how a green light starts meaning nothing --
+            # and a caveat delivered thirty turns before the success it
+            # qualifies has not been delivered. This is the one moment the
+            # repetition buys something, and success is rare enough that it
+            # cannot become the wallpaper the other paths were.
             print(json.dumps({"systemMessage": _loose_note(loose)}))
         return 0
     if ts in ("exhausted", "stalled", "blocked", "no-op"):
         coord.clear_blocks(conn)
+        say_loose = loose and coord.loose_note_due(conn, loose)
         print(json.dumps({"systemMessage":
             f"loopgraph: terminal state {ts} - allowing stop, NOT success"
-            + (" " + _loose_note(loose) if loose else "")}))
+            + (" " + _loose_note(loose) if say_loose else "")}))
         return 0
 
     cap = coord.max_blocks()

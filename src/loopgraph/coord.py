@@ -481,8 +481,31 @@ def owned_here(conn, node_id: str) -> bool:
     return flags.get("session", "") == session_key()
 
 
+def _age_days(created_at: str) -> int | None:
+    """Whole days since a node was created, or None if unparseable."""
+    if not created_at:
+        return None
+    from datetime import datetime, timezone
+    try:
+        t = datetime.fromisoformat(created_at)
+    except ValueError:
+        return None
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    return max(0, (datetime.now(timezone.utc) - t).days)
+
+
 def unenforced_criteria(conn) -> list[dict]:
-    """Open criteria this session is not held to, and why."""
+    """Open criteria this session is not held to, and why.
+
+    The age is part of the answer, not decoration. Every one of these is a
+    choice between `adopt` and `drop`, and that choice is undecidable from
+    the id alone: a criterion stated an hour ago by a live sibling session
+    means something different from one left behind three weeks ago by a
+    session that is never coming back. Without the age the cheapest move is
+    to ignore the line, which is what happened - the same two ids were named
+    618 times across this machine and neither was ever adopted or dropped.
+    """
     from .graph import all_criteria
     from .state import derive_status
     out = []
@@ -490,9 +513,37 @@ def unenforced_criteria(conn) -> list[dict]:
         if owned_here(conn, c["id"]) or derive_status(conn, c["id"]) == "closed":
             continue
         owner = node_flags(conn, c["id"]).get("session", "")
-        out.append({"id": c["id"], "statement": c["statement"],
-                    "why": f"owned by {owner}" if owner else "no owner recorded"})
+        why = f"owned by {owner}" if owner else "no owner recorded"
+        try:
+            created = c["created_at"]          # sqlite3.Row, not a dict
+        except (IndexError, KeyError):
+            created = ""
+        age = _age_days(created or "")
+        if age is not None:
+            why += f", {age}d old"
+        out.append({"id": c["id"], "statement": c["statement"], "why": why})
     return out
+
+
+def loose_note_due(conn, loose) -> bool:
+    """True the first time this session sees this exact set of loose ids.
+
+    Naming unenforced criteria is right; naming them on every stop is not.
+    Unsuppressed, this note repeated 432 times in one real session and 998
+    times across the machine, always the same two ids, and it changed
+    nothing either time. A warning that arrives on every turn is read as
+    wallpaper, so the one that actually matters arrives pre-ignored -- the
+    same way a nag that could not be ended made the spec demand worthless.
+
+    Keyed by the set, so it speaks again the moment the set changes: a NEW
+    unenforced criterion is news even if an old one was already mentioned.
+    """
+    key = "loose_said:" + (session_key() or "-")
+    sig = ",".join(sorted(u["id"] for u in loose))
+    if meta_get(conn, key, "") == sig:
+        return False
+    meta_set(conn, key, sig)
+    return True
 
 
 def adopt(conn, node_id: str) -> bool:
