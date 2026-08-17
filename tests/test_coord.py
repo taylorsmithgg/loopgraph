@@ -322,3 +322,32 @@ def test_env_still_forces_off_when_default_is_on(conn, monkeypatch):
     monkeypatch.setenv("LOOPGRAPH_COORD", "0")
     monkeypatch.setenv("LOOPGRAPH_LOOP", "0")
     assert is_enabled(conn) is False and loop_enabled(conn) is False
+
+
+def test_default_db_path_follows_the_payload_cwd_not_the_process(tmp_path, monkeypatch):
+    """Hooks must key the graph on the session's cwd, not the process's.
+
+    The agent's shell keeps its working directory between tool calls, so one
+    `cd` into another repo -- to run its tests -- silently repointed this for
+    the rest of the session: the goal was recorded under one root and demanded
+    out of another, and no CLI call could reach the db the gate was reading.
+    """
+    from loopgraph import coord
+    a = tmp_path / "project-a"; a.mkdir()
+    b = tmp_path / "project-b"; b.mkdir()
+    monkeypatch.chdir(b)                       # process has drifted to B
+    assert coord.default_db_path(str(a)) != coord.default_db_path(str(b))
+    assert coord.default_db_path(str(a)) == coord.default_db_path(str(a))
+    # and with no hint it still falls back to the process cwd
+    assert coord.default_db_path() == coord.default_db_path(str(b))
+
+
+def test_default_db_path_uses_git_toplevel_of_the_given_dir(tmp_path, monkeypatch):
+    """The git lookup has to run against the passed root, not the process's,
+    or a subdirectory hint silently resolves the wrong repo."""
+    import subprocess
+    from loopgraph import coord
+    repo = tmp_path / "repo"; (repo / "sub").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    monkeypatch.chdir(tmp_path)
+    assert coord.default_db_path(str(repo / "sub")) == coord.default_db_path(str(repo))

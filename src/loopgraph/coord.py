@@ -21,18 +21,29 @@ FACT = "fact"
 DEFAULT_LEASE_S = 14400  # 4h: covers ~98.6% of observed agent lifetimes
 
 
-def default_db_path() -> str:
+def default_db_path(cwd: str | None = None) -> str:
     """Per-project database, stored OUTSIDE the project.
 
     Keyed by git toplevel (or cwd). Nothing is ever written into the repo,
     so there is nothing to gitignore, commit or clean up.
+
+    Hooks MUST pass the cwd from their event payload rather than relying on
+    os.getcwd(). The agent's shell keeps its working directory between tool
+    calls, so a single `cd` into some other repo -- to run its tests, say --
+    silently repoints this function for the rest of the session. Observed
+    live: spec_prompt recorded a goal under ~, the agent cd'd into another
+    repo to run pytest, and the Stop hook then demanded that goal out of the
+    OTHER repo's database. The CLI, resolving from the real cwd, could not
+    see it, so no `loopgraph add` or `noop` could ever satisfy the gate and
+    it simply blocked until the cap. The payload cwd is the session's, and
+    does not drift.
     """
     import hashlib
     import os
     import subprocess
-    root = os.getcwd()
+    root = cwd or os.getcwd()
     try:
-        out = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+        out = subprocess.run(["git", "-C", root, "rev-parse", "--show-toplevel"],
                              capture_output=True, text=True, timeout=5)
         if out.returncode == 0 and out.stdout.strip():
             root = out.stdout.strip()

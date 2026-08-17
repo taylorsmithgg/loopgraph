@@ -35,7 +35,7 @@ def _hook(name):
 def env(tmp_path, monkeypatch):
     """Both hooks over one database, with the detached fence stubbed out."""
     db = str(tmp_path / "g.db")
-    monkeypatch.setattr(coord, "default_db_path", lambda: db)
+    monkeypatch.setattr(coord, "default_db_path", lambda *a, **k: db)
     monkeypatch.setenv("LOOPGRAPH_SESSION", "session-under-test")
     prompt_hook = _hook("spec_prompt")
     gate_hook = _hook("loop_gate")

@@ -6,9 +6,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 def main() -> int:
     try:
+        ev = json.load(sys.stdin)
+    except Exception:
+        ev = {}                       # never block a session start on this
+    try:
         from loopgraph import coord
         from loopgraph.db import open_db
-        conn = open_db(coord.default_db_path())
+        # Payload cwd, not os.getcwd(): the agent's shell keeps its directory
+        # between tool calls, so the process cwd drifts to whatever repo was
+        # last cd'd into and the brief would come from that project's graph.
+        conn = open_db(coord.default_db_path(ev.get("cwd")))
         if not coord.is_enabled(conn):
             return 0
         text = coord.brief(conn)

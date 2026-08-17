@@ -32,7 +32,7 @@ def main() -> int:
     try:
         from loopgraph import coord
         from loopgraph.db import open_db
-        conn = open_db(coord.default_db_path())
+        conn = open_db(coord.default_db_path(ev.get("cwd")))
         if not coord.is_enabled(conn):
             return 0
         coord.sweep_expired(conn)

@@ -23,7 +23,7 @@ GOAL = "make the ingest pipeline stop dropping events on restart"
 @pytest.fixture
 def hook(tmp_path, monkeypatch):
     db = str(tmp_path / "spec.db")
-    monkeypatch.setattr(coord, "default_db_path", lambda: db)
+    monkeypatch.setattr(coord, "default_db_path", lambda *a, **k: db)
     spec = importlib.util.spec_from_file_location("spec_prompt", HOOK)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -72,5 +72,5 @@ def test_opt_out_env(hook, monkeypatch):
 
 def test_never_blocks_a_prompt_when_broken(hook, monkeypatch):
     monkeypatch.setattr(coord, "default_db_path",
-                        lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
     assert hook(GOAL) == {}

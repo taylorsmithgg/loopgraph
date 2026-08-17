@@ -33,7 +33,7 @@ def _load_hook():
 def gate(tmp_path, monkeypatch):
     """Run the hook against a throwaway db and return (event -> stdout json)."""
     db = str(tmp_path / "gate.db")
-    monkeypatch.setattr(coord, "default_db_path", lambda: db)
+    monkeypatch.setattr(coord, "default_db_path", lambda *a, **k: db)
     mod = _load_hook()
 
     monkeypatch.setenv("LOOPGRAPH_SESSION", "test")
