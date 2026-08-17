@@ -86,12 +86,36 @@ SCOPES = ("safe", "full")
 # committed to a public repository is itself the leak it was written to
 # prevent. Put them in `~/.loopgraph/sensitive.toml` -- see
 # `load_sensitive_patterns` -- where they stay on your machine.
+# `token` is a homonym, and the two senses are not equally private: a bearer
+# credential, and the unit model cost is measured in. Folding them together
+# filed a memory about output-token accounting as credential material and
+# withheld it from every safe-scope harness -- on an operator whose work is
+# largely token accounting, that quietly hides a whole subject rather than a
+# secret. The measured senses are excluded by name; every other use of the
+# word still classifies, so "refresh token", "bearer token" and a bare token
+# in a note about where it lives are all still caught. Dropping the trailing
+# \w* also drops "tokenizer" and "tokenization", which are never credentials.
+_TOKEN_MEASURE_WORDS = ("output", "input", "context", "cache", "prompt",
+                        "completion", "cached", "uncached")
+_TOKEN_PATTERN = (
+    "(?i)"
+    # one fixed-width lookbehind each: Python will not take an alternation of
+    # differing widths in a single one.
+    + "".join(rf"(?<!{w} )" for w in _TOKEN_MEASURE_WORDS)
+    # Ordered alternation: "tokens" / a bare "token" / "token_url", but never
+    # "tokenizer" -- no word boundary after "token" there, and "i" is not a
+    # separator, so every branch correctly fails.
+    + r"\btoken(?:s\b|\b|[-_]\w+)"
+    + r"(?!\s*(?:/|per\b|count\b|budget\b|spent\b|remaining\b))"
+)
+
 GENERIC_PATTERNS: list[tuple[str, str]] = [
     (r"\b(?:\d{1,3}\.){3}\d{1,3}\b", "an IP address"),
     (r"\barn:aws:[a-z0-9-]+:", "an AWS ARN"),
     (r"\b\d{12}\b", "an AWS account id"),
-    (r"(?i)\b(?:password|passwd|secret|api[-_ ]?key|token|credential|private[-_ ]key|"
+    (r"(?i)\b(?:password|passwd|secret|api[-_ ]?key|credential|private[-_ ]key|"
      r"\.pem\b|easy-rsa|pki/)\w*", "credential material or its location"),
+    (_TOKEN_PATTERN, "credential material or its location"),
     (r"(?i)\b[\w.+-]+@[\w-]+\.[\w.]+\b", "an email address"),
     (r"(?i)\.svc\.cluster\.local\b|\bkubectl\s+-n\s+\S+", "internal cluster detail"),
     (r"(?i)\b(?:client|tenant|customer)\b.{0,40}\b(?:rfp|audit|pursuit|onboard)",

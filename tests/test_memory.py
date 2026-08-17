@@ -580,3 +580,29 @@ def test_a_conclusion_on_the_theme_still_silences_it(mem):
     retain(mem, "redpanda decommission always blocks at three brokers with RF three",
            kind="model")
     assert reflect(mem) == []
+
+
+# `token` means two things and only one of them is private. Getting this wrong
+# withheld a memory about token accounting as though it held a credential.
+@pytest.mark.parametrize("text", [
+    "the refresh token is stored in SSM under /mss/soc/key",
+    "bearer token in the Authorization header",
+    "rotate the token before Friday",
+    "token_url points at the gov endpoint",
+])
+def test_credential_token_still_classifies(text):
+    from loopgraph.memory import sensitivity
+    assert "credential material or its location" in sensitivity(text)
+
+
+@pytest.mark.parametrize("text", [
+    "the session spent 196.8M output tokens across 298k turns",
+    "input tokens are cached for an hour",
+    "context tokens per turn rose from 227k to 278k",
+    "the tokenizer is the slow part",
+    "budget the run at 50k tokens/turn",
+    "token count is the wrong metric here",
+])
+def test_measured_tokens_are_not_credentials(text):
+    from loopgraph.memory import sensitivity
+    assert sensitivity(text) == [], text
