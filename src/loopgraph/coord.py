@@ -571,6 +571,13 @@ def note_goal(conn, text: str) -> None:
         return                                   # first statement of it wins
     meta_set(conn, "goal_pending", (text or "").strip()[:200])
     meta_set(conn, "spec_blocks", "0")
+    # Stamped so the janitor can age it. An unresolved goal with no date is
+    # indistinguishable from one stated a minute ago, which is how twelve of
+    # them sat unanswered across this machine without anyone being able to
+    # say which were dead.
+    import datetime as _dt
+    meta_set(conn, "goal_pending_at",
+             _dt.datetime.now(_dt.timezone.utc).isoformat())
 
 
 def goal_pending(conn) -> str:

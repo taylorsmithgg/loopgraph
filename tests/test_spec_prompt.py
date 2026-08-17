@@ -74,3 +74,11 @@ def test_never_blocks_a_prompt_when_broken(hook, monkeypatch):
     monkeypatch.setattr(coord, "default_db_path",
                         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
     assert hook(GOAL) == {}
+
+
+def test_harness_noise_is_not_a_stated_goal(hook):
+    """`<task-notification>` envelopes were captured as goals three times on
+    this machine and then sat unresolved forever: the gate demanded an
+    end-state for a string the user never typed."""
+    assert hook("<task-notification>\n<task-id>b0dmbff3o</task-id>\n"
+                "<output>the subagent finished its work and returned</output>") == {}

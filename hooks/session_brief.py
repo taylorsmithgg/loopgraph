@@ -18,7 +18,19 @@ def main() -> int:
         conn = open_db(coord.default_db_path(ev.get("cwd")))
         if not coord.is_enabled(conn):
             return 0
-        text = coord.brief(conn)
+        parts = [coord.brief(conn)]
+        # Loose ends from EVERY graph, not just this one. Enforcement is
+        # rightly scoped to one project; visibility must not be, or work
+        # stays unfinished simply because you are standing in a different
+        # repo than the criterion. Bounded on purpose -- this runs on every
+        # session start, and a brief that costs real context gets switched
+        # off, which is the same as never having written it.
+        try:
+            from loopgraph import janitor
+            parts.append(janitor.digest(max_lines=12))
+        except Exception:
+            pass                      # a janitor must never break a session
+        text = "\n\n".join(p for p in parts if p and p.strip())
         if not text:
             return 0
         print(json.dumps({"hookSpecificOutput": {

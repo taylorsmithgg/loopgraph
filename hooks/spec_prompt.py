@@ -52,7 +52,11 @@ def main() -> int:
     except Exception:
         return 0
     prompt = (ev.get("prompt") or "").strip()
-    if len(prompt) < MIN_PROMPT_CHARS or prompt.startswith("/"):
+    # A harness envelope is not a request. `<task-notification>` blocks were
+    # captured as stated goals three times on this machine and then sat
+    # unresolved forever: the gate demanded an end-state for a string the
+    # user never typed, and no one could answer for it.
+    if len(prompt) < MIN_PROMPT_CHARS or prompt.startswith(("/", "<")):
         return 0
     if os.environ.get("LOOPGRAPH_SPEC_PROMPT", "") == "0":
         return 0

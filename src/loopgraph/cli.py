@@ -489,6 +489,13 @@ def main(argv: list[str] | None = None) -> int:
     fa.add_argument("--text", default="")
     fa.add_argument("--tags", default="")
 
+    jn = sub.add_parser("janitor")
+    jn.add_argument("--max-lines", type=int, default=20)
+    jn.add_argument("--stale-days", type=int, default=3)
+    jn.add_argument("--json", action="store_true")
+    jn.add_argument("--reap", action="store_true",
+                    help="clear stated goals nobody turned into criteria")
+    jn.add_argument("--apply", action="store_true", help="with --reap, actually write")
     sub.add_parser("next")
     sub.add_parser("tick")
     sp = sub.add_parser("spend")
@@ -504,6 +511,24 @@ def main(argv: list[str] | None = None) -> int:
     if args.db is None:
         args.db = coord.default_db_path()
     conn = open_db(args.db)
+
+    if args.cmd == "janitor":
+        from . import janitor as _jan
+        if args.reap:
+            done = _jan.reap(dry_run=not args.apply)
+            for line in done:
+                print(("cleared " if args.apply else "would clear ") + line)
+            if not done:
+                print("janitor: no stale goals to clear")
+            return 0
+        data = _jan.scan()
+        if args.json:
+            print(json.dumps(data, indent=2))
+            return 0
+        out = _jan.digest(max_lines=args.max_lines, stale_days=args.stale_days,
+                          data=data)
+        print(out or "janitor: nothing loose")
+        return 0
 
     if args.cmd == "init":
         return 0
