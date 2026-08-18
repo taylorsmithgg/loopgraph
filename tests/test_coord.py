@@ -438,3 +438,41 @@ def test_no_gate_has_run_yet_falls_back_to_cwd(tmp_path, monkeypatch):
                         lambda p: p.replace("~", str(tmp_path), 1))
     (tmp_path / ".loopgraph").mkdir(parents=True, exist_ok=True)
     assert coord.session_graph_path() is None
+
+
+def test_the_most_recently_gated_graph_wins(tmp_path, monkeypatch):
+    """A session that gated one graph before a fix and another after carries
+    the marker in both. First-match over an unsorted glob answered differently
+    depending on what order the filesystem felt like returning -- and
+    nondeterministic is worse than wrong, because it cannot be reproduced."""
+    from loopgraph import coord
+    from loopgraph.db import open_db, meta_set
+    monkeypatch.setenv("LOOPGRAPH_SESSION", "sess-two-graphs")
+    monkeypatch.setattr(os.path, "expanduser",
+                        lambda p: p.replace("~", str(tmp_path), 1))
+    (tmp_path / ".loopgraph").mkdir(parents=True, exist_ok=True)
+    old = str(tmp_path / ".loopgraph" / ("a" * 16 + ".db"))
+    new = str(tmp_path / ".loopgraph" / ("z" * 16 + ".db"))
+    for path, stamp in ((old, "100.0"), (new, "200.0")):
+        c = open_db(path)
+        meta_set(c, "gate_seen:sess-two-graphs", stamp)
+        c.commit()
+    assert coord.session_graph_path() == new
+    # and it is stable across calls
+    assert coord.session_graph_path() == new
+
+
+def test_a_legacy_unstamped_marker_loses_to_a_stamped_one(tmp_path, monkeypatch):
+    """Markers written before timestamping said "1". They must not outrank a
+    graph the gate has actually used since."""
+    from loopgraph import coord
+    from loopgraph.db import open_db, meta_set
+    monkeypatch.setenv("LOOPGRAPH_SESSION", "sess-legacy")
+    monkeypatch.setattr(os.path, "expanduser",
+                        lambda p: p.replace("~", str(tmp_path), 1))
+    (tmp_path / ".loopgraph").mkdir(parents=True, exist_ok=True)
+    legacy = str(tmp_path / ".loopgraph" / ("a" * 16 + ".db"))
+    fresh = str(tmp_path / ".loopgraph" / ("b" * 16 + ".db"))
+    c = open_db(legacy); meta_set(c, "gate_seen:sess-legacy", "1"); c.commit()
+    c = open_db(fresh); meta_set(c, "gate_seen:sess-legacy", "1700000000.0"); c.commit()
+    assert coord.session_graph_path() == fresh

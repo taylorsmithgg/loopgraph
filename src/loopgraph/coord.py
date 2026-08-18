@@ -135,7 +135,14 @@ def session_graph_path() -> str | None:
     key = session_key()
     if not key:
         return None
-    for path in glob.glob(os.path.join(os.path.expanduser("~"), ".loopgraph", "*.db")):
+    # NEWEST wins, and the search is sorted. A session that ran its gate in
+    # one graph before a fix and another after carries the marker in both --
+    # exactly what happened here -- and first-match-wins over an unsorted glob
+    # answered differently depending on what order the filesystem felt like
+    # returning. Nondeterministic is worse than wrong: it cannot be reproduced.
+    best, best_at = None, -1.0
+    for path in sorted(glob.glob(os.path.join(
+            os.path.expanduser("~"), ".loopgraph", "*.db"))):
         if os.path.basename(path) == "memory.db":
             continue
         try:
@@ -144,11 +151,17 @@ def session_graph_path() -> str | None:
                 "SELECT value FROM meta WHERE key = ?",
                 ("gate_seen:" + key,)).fetchone()
             conn.close()
-            if row:
-                return path
         except sqlite3.Error:
             continue
-    return None
+        if not row:
+            continue
+        try:
+            at = float(row[0])
+        except (TypeError, ValueError):
+            at = 0.0          # legacy marker wrote "1"; loses to any stamped one
+        if at > best_at:
+            best, best_at = path, at
+    return best
 
 
 def open_project_db(cwd: str | None = None,

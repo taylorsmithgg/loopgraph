@@ -63,7 +63,11 @@ def main() -> int:
         # The shared slot above is last-writer-wins across every session in
         # this db, so on its own it cannot tell "our gate disagrees" from
         # "a sibling stopped after us".
-        meta_set(conn, "gate_seen:" + (coord.session_key() or "-"), "1")
+        # Timestamped, so a session that has gated more than one graph can be
+        # resolved to the most recent rather than to whichever the filesystem
+        # listed first.
+        import time as _t
+        meta_set(conn, "gate_seen:" + (coord.session_key() or "-"), str(_t.time()))
         meta_set(conn, "gate_seen_any", "1")
 
         # `stop_hook_active` is true only while the harness is ALREADY
