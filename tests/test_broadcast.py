@@ -63,3 +63,13 @@ def test_a_corrupt_bus_never_breaks_a_prompt(bus):
     os.makedirs(os.path.dirname(bus.BUS), exist_ok=True)
     open(bus.BUS, "w").write("{ not json\n")
     assert bus.unseen("sess-B") == []
+
+
+def test_publisher_identity_matches_reader_identity(bus, monkeypatch):
+    """Publish tagged with the bridge id while read used session_id, so three
+    self-published entries came back as though a peer had sent them. Same
+    mismatch class as the gate's false MISMATCH, one component over."""
+    monkeypatch.setenv("CLAUDE_CODE_BRIDGE_SESSION_ID", "sess-A")
+    bus.publish("note", "mine", "sess-A")
+    assert bus.unseen("sess-A") == []
+    assert len(bus.unseen("sess-B")) == 1

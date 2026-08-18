@@ -168,8 +168,13 @@ def _mem(args) -> int:
                 pass                    # broadcasting must never fail a retain
         why = memory.sensitivity(text)
         if why:
-            print(f"retained as sensitive ({'; '.join(why)}): withheld from "
-                  "harnesses running at scope=safe", file=sys.stderr)
+            # Queued, not announced. This printed 98 times mid-task, and each
+            # one interrupts the work to report something that needs no
+            # decision at that moment: the memory is stored either way and the
+            # scope rule already applies. Security findings are worth one
+            # deliberate pass, not a running commentary -- `loopgraph security`.
+            from .security import queue as _sec_queue
+            _sec_queue("memory withheld at safe scope", mid, "; ".join(why))
         print(mid)
         return 0
 
@@ -504,6 +509,11 @@ def main(argv: list[str] | None = None) -> int:
     fa.add_argument("--text", default="")
     fa.add_argument("--tags", default="")
 
+    sec = sub.add_parser("security")
+    sec.add_argument("--clear", action="store_true",
+                     help="mark everything reviewed (after the review pass)")
+    sec.add_argument("--json", action="store_true")
+
     ds = sub.add_parser("distill")
     ds.add_argument("--run", action="store_true",
                     help="mine now and write the candidate file (what the schedule calls)")
@@ -536,6 +546,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.db is None:
         args.db = coord.default_db_path()
     conn = open_db(args.db)
+
+    if args.cmd == "security":
+        from . import security as _sec
+        if args.clear:
+            n = _sec.clear()
+            print(f"security: {n} item(s) marked reviewed")
+            return 0
+        if args.json:
+            print(json.dumps(_sec.pending(), indent=2))
+            return 0
+        print(_sec.report())
+        return 0
 
     if args.cmd == "distill":
         from . import distill as _dist
