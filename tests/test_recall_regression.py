@@ -20,11 +20,12 @@ from loopgraph import memory
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Measured 2026-08-17 with first-line weighting and a length penalty, after
-# the ablation showed aliases and link expansion were worth one hit between
-# them. Raise these when a change earns it; never lower them silently.
+# Measured 2026-08-17 with first-line weighting, a length penalty, and
+# mutual/degree-capped autolinking. Raise these when a change earns it; never
+# lower them silently. @1 went 9 -> 10 by REMOVING links, which is why the
+# graph is guarded by this number and not by how connected it looks.
 FLOOR_AT5 = 15
-FLOOR_AT1 = 9
+FLOOR_AT1 = 10
 CASE_COUNT = 20
 
 

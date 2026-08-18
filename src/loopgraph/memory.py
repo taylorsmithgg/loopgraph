@@ -357,6 +357,7 @@ def retain(
 TITLE_WEIGHT = 2.0
 AUTOLINK_MAX = 4
 AUTOLINK_MIN_COVERAGE = 0.34
+AUTOLINK_MAX_DEGREE = 8
 
 
 def autolink(conn: sqlite3.Connection, mid: str, text: str,
@@ -368,6 +369,19 @@ def autolink(conn: sqlite3.Connection, mid: str, text: str,
     a coverage floor so a shared common word is not a relationship. Wrong
     links are worse than missing ones -- they widen every future expansion --
     so this prefers to add nothing.
+
+    Two defences against hubs, which one-directional similarity produces on
+    its own. Sampled after the first pass, about half the links were wrong,
+    and the pattern was obvious: abstract notes match everybody.
+    `feedback_dead_but_looks_alive` -- a note about a failure CLASS, phrased
+    in words every incident shares -- had reached degree 33 against a median
+    of 4, so it was being dragged into expansions for AMH forwarders and
+    noexec mounts alike.
+
+    - Mutual: B is only linked from A if A is also among B's own best hits.
+      A hub matches everyone; almost no one is what the hub is about.
+    - Degree cap: nothing accumulates auto-links without limit, so one very
+      quotable memory cannot become the graph's centre of gravity.
     """
     try:
         hits = recall(conn, text, k=max_links + 1, scope="full")
@@ -379,12 +393,42 @@ def autolink(conn: sqlite3.Connection, mid: str, text: str,
             continue
         if h.get("coverage", 0) < min_coverage:
             continue
+        if _auto_degree(conn, h["id"]) >= AUTOLINK_MAX_DEGREE:
+            continue                      # already a hub; do not feed it
+        if not _is_mutual(conn, h["id"], mid, max_links):
+            continue
         try:
             relate(conn, mid, h["id"])
             made.append(h["id"])
         except Exception:
             continue
     return made
+
+
+def _auto_degree(conn: sqlite3.Connection, mid: str) -> int:
+    row = conn.execute(
+        "SELECT count(*) FROM edges WHERE src = ? OR dst = ?", (mid, mid)
+    ).fetchone()
+    return row[0] if row else 0
+
+
+def _is_mutual(conn: sqlite3.Connection, other: str, mid: str, k: int) -> bool:
+    """Is `mid` among `other`'s own best matches?
+
+    One-directional similarity is what builds hubs: an abstract note is
+    close to everything, while almost nothing is close to it. Requiring the
+    relationship to hold in both directions removes exactly that asymmetry.
+    """
+    row = conn.execute(
+        "SELECT statement FROM nodes WHERE id = ? AND type = 'memory'",
+        (other,)).fetchone()
+    if row is None:
+        return False
+    try:
+        back = recall(conn, row["statement"], k=k + 2, scope="full")
+    except Exception:
+        return False
+    return mid in {h["id"] for h in back}
 
 
 def _ensure_meta_col(conn: sqlite3.Connection) -> None:
