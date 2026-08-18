@@ -154,11 +154,18 @@ def scan(loopgraph_dir: str | None = None, home: str | None = None,
                 "owner": flags.get("session", ""),
             })
         if not rows and not goal:
+            # EVERY table, not just nodes. `--apply` deletes these files, and
+            # "no criteria" is not the same claim as "no history": a graph
+            # could hold a delta log or run records with zero nodes, and the
+            # single-table test would have called that empty and removed it
+            # unrecoverably. Checked after the fact against the survivors and
+            # it happened to hold, which is luck rather than a design.
             try:
-                if conn.execute("select count(*) from nodes").fetchone()[0] == 0:
+                if all(conn.execute(f"select count(*) from {tbl}").fetchone()[0] == 0
+                       for tbl in ("nodes", "deltas", "runs", "edges")):
                     empty.append(path)
             except sqlite3.Error:
-                pass
+                pass                       # unsure: never queue it for deletion
         conn.close()
 
     key = lambda x: -(x["age"] if x["age"] is not None else -1)

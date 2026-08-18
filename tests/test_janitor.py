@@ -225,3 +225,17 @@ def test_scan_does_not_read_the_real_corpus_when_given_a_tmp_dir(tmp_path):
     assert health["files"] == 0
     assert health["searchable"] in (None, 0)
     assert health["unconcluded"] == 0
+
+
+def test_reap_never_deletes_a_graph_that_holds_history(tmp_path):
+    """--apply deletes files. "No criteria" is not "no history": a graph can
+    hold a delta log with zero nodes, and a single-table emptiness test would
+    have removed it unrecoverably."""
+    d = str(tmp_path)
+    conn = _graph(d, "e" * 15 + "1", [])
+    conn.execute("INSERT INTO deltas (entity_id, change_type, old_value, "
+                 "new_value, wall_time, logical_clock) "
+                 "VALUES ('x', 'NOTE', NULL, 'something happened', '2026-01-01', 1)")
+    conn.commit()
+    assert janitor.scan(loopgraph_dir=d, home=d)["empty"] == [], \
+        "a graph with delta history is not empty"
