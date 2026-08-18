@@ -672,3 +672,49 @@ def test_aliases_only_add_candidates_never_displace_a_literal(tmp_path):
     memory.retain(conn, "customer records live in the CRM")
     hits = memory.recall(conn, "tenant isolation multipart", k=5, scope="full")
     assert hits[0]["id"] == exact
+
+
+# These narrowings free memories for every harness that is not trusted with
+# client content. Both directions are tested because the failure modes are
+# not symmetric: a false positive costs recall, a false negative leaks.
+@pytest.mark.parametrize("text", [
+    "the logger host is 10.24.30.73",
+    "arn:aws:s3:us-east-2:198901727629:bucket/x",
+    "account 198901727629 owns it",
+    "john.fitch@cross-check.com approved it",
+    "the refresh token is stored in SSM",
+    "https://portal.someclient.com/admin is the console",
+    "chi-mss.mss.svc.cluster.local resolves internally",
+    "kubectl -n mss get pods",
+])
+def test_still_classified_after_narrowing(text):
+    from loopgraph.memory import sensitivity
+    assert sensitivity(text), f"LEAK: {text!r} no longer classifies"
+
+
+@pytest.mark.parametrize("text", [
+    "macOS version 6.2.0.9 changed the default handler",
+    "clone with git@gitlab.com:group/repo.git",
+    "an arn:aws:ec2: prefix appears in the policy",
+    "https://management.usgovcloudapi.net is the gov endpoint",
+    "names ending .svc.cluster.local resolve in-cluster",
+    "noreply@github.com sent the notification",
+])
+def test_no_longer_a_false_positive(text):
+    from loopgraph.memory import sensitivity
+    assert sensitivity(text) == [], text
+
+
+def test_recall_ranks_a_topical_title_over_a_long_omnibus(tmp_path):
+    """A 19k-char programme note outranked the exact answer by collecting
+    query terms it never had the subject of. The first line states what a
+    memory is about; a match there is evidence of topic, not of length."""
+    from loopgraph import memory
+    conn = memory.open_memory(str(tmp_path / "m.db"))
+    right = memory.retain(conn, "Device health monitoring lives in TimescaleDB\n\n"
+                                "the source health tables are here")
+    memory.retain(conn, "Alerting overhaul programme\n\n" + (
+        "device data sending health monitoring track " * 60))
+    hits = memory.recall(conn, "where is device health monitoring tracked",
+                         k=3, scope="full")
+    assert hits[0]["id"] == right

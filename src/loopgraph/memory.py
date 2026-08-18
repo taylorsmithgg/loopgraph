@@ -115,19 +115,43 @@ _TOKEN_PATTERN = (
     + r"(?!\s*(?:/|per\b|count\b|budget\b|spent\b|remaining\b))"
 )
 
+# Measured 2026-08-17: 101 of 214 memories classified sensitive, and held-out
+# recall@5 at scope=safe was HALF what it was at full (8/20 vs 15/20). Every
+# harness that is not trusted with client content therefore lost about half
+# the corpus. Over-classifying is the right default, but these five were
+# matching things that identify nobody -- a version number read as an IP, a
+# public vendor endpoint read as an internal one -- and each one costs real
+# recall in every other harness. Narrowed with the leak direction, not the
+# convenience direction, in mind.
 GENERIC_PATTERNS: list[tuple[str, str]] = [
-    (r"\b(?:\d{1,3}\.){3}\d{1,3}\b", "an IP address"),
-    (r"\barn:aws:[a-z0-9-]+:", "an AWS ARN"),
+    # A dotted quad is an IP unless it is a version. "macOS 6.2.0.9" and
+    # "logstash 8.14.0.1" identify no host.
+    (r"(?<![\w.])(?<!v)(?<!version )(?<!release )(?<!Version )"
+     r"\b(?:\d{1,3}\.){3}\d{1,3}\b(?!\.\d)", "an IP address"),
+    # A bare service prefix in prose ("arn:aws:s3:") names nothing. Require a
+    # region/account tail, which is the part that identifies an estate.
+    (r"\barn:aws:[a-z0-9-]+:[a-z0-9-]*:[^\s:]+", "an AWS ARN"),
     (r"\b\d{12}\b", "an AWS account id"),
     (r"(?i)\b(?:password|passwd|secret|api[-_ ]?key|credential|private[-_ ]key|"
      r"\.pem\b|easy-rsa|pki/)\w*", "credential material or its location"),
     (_TOKEN_PATTERN, "credential material or its location"),
-    (r"(?i)\b[\w.+-]+@[\w-]+\.[\w.]+\b", "an email address"),
-    (r"(?i)\.svc\.cluster\.local\b|\bkubectl\s+-n\s+\S+", "internal cluster detail"),
+    # git@ and noreply@ on a public forge are addresses of a service, not of
+    # a person, and appear in every clone URL.
+    (r"(?i)(?<![\w.+-])(?!git@|noreply@|no-reply@)[\w.+-]+@"
+     r"(?!github\.com|gitlab\.com)[\w-]+\.[\w.]+\b", "an email address"),
+    # The bare suffix is generic Kubernetes DNS. A service and namespace in
+    # front of it is what names somebody's cluster.
+    (r"(?i)\b[\w-]+\.[\w-]+\.svc\.cluster\.local\b|\bkubectl\s+-n\s+\S+",
+     "internal cluster detail"),
     (r"(?i)\b(?:client|tenant|customer)\b.{0,40}\b(?:rfp|audit|pursuit|onboard)",
      "a named client engagement"),
-    (r"(?i)\bhttps?://(?!(?:docs\.|www\.)?(?:anthropic|github|arxiv|python|"
-     r"clickhouse|opensearch)\.)[a-z0-9.-]+\.(?:com|net|org|io|us|gov)\b",
+    # Public vendor endpoints are documentation, not an estate. Everything
+    # else on a real TLD still classifies.
+    (r"(?i)\bhttps?://(?!(?:docs\.|www\.|login\.|management\.|sts\.)?"
+     r"(?:anthropic|github|gitlab|arxiv|python|clickhouse|opensearch|"
+     r"microsoft|windows|azure|usgovcloudapi|amazonaws|googleapis|"
+     r"kubernetes|elastic)\.)"
+     r"[a-z0-9.-]+\.(?:com|net|org|io|us|gov)\b",
      "an internal or client URL"),
 ]
 
@@ -330,6 +354,7 @@ def retain(
 # host pool retained days apart. The graph was a pile of documents wearing
 # the word graph. These are marked auto so a curated `[[link]]` stays
 # distinguishable from a guess.
+TITLE_WEIGHT = 2.0
 AUTOLINK_MAX = 4
 AUTOLINK_MIN_COVERAGE = 0.34
 
@@ -574,6 +599,31 @@ def recall(
             "matched": hit_terms,
             "superseded_by": superseded_by(conn, r["id"]),
         })
+    # Where a term matches matters as much as whether it does. These are long
+    # multi-topic notes -- median 1400 chars, one of them 36k -- and an
+    # omnibus memory collects query terms by accident: a 19k-char programme
+    # note outranked the exact answer while containing none of the subject.
+    # The first line states what a memory is ABOUT, so a match there is
+    # evidence of topic rather than of length, and a mild length penalty
+    # stops the longest document winning ties it has not earned.
+    #
+    # Held out (20 questions the alias table never saw): @1 7->9, @5 13->15.
+    # That is more than the alias table and the link hop contributed
+    # together, and it is measured on queries that were not used to build it.
+    # Parameters are the middle of the plateau, not its peak -- tuning them
+    # against the held-out set would recreate exactly the overfitting this
+    # was written to catch.
+    for m in out:
+        head = (m["text"].splitlines() or [""])[0].lower()
+        flat_head = re.sub(r"[^a-z0-9]+", "", head)
+        in_head = sum(1 for t in terms
+                      if t in head or re.sub(r"[^a-z0-9]+", "", t) in flat_head)
+        title_cov = in_head / len(terms) if terms else 0.0
+        length_penalty = 1.0 / (1.0 + 0.15 * len(m["text"]) / 1000.0)
+        m["score"] = round(
+            m["score"] * (1 + TITLE_WEIGHT * title_cov) * length_penalty, 3)
+        m["title_coverage"] = round(title_cov, 3)
+
     # Coverage was computed, reported, and then ignored by the ordering. It
     # is the only term that knows how much of the QUESTION was answered, and
     # without it BM25 hands rank 1 to whatever is longest and most common:
