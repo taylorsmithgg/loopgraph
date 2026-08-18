@@ -73,3 +73,20 @@ def test_publisher_identity_matches_reader_identity(bus, monkeypatch):
     bus.publish("note", "mine", "sess-A")
     assert bus.unseen("sess-A") == []
     assert len(bus.unseen("sess-B")) == 1
+
+
+def test_bus_path_is_overridable(monkeypatch, tmp_path):
+    """The end-to-end check for this file published a test entry onto the REAL
+    bus, and every session on the machine received it for hours. A
+    verification that cannot run without polluting production either pollutes
+    production or does not get run."""
+    import importlib.util, os
+    monkeypatch.setenv("LOOPGRAPH_BROADCAST_BUS", str(tmp_path / "b.jsonl"))
+    monkeypatch.setenv("LOOPGRAPH_BROADCAST_SEEN", str(tmp_path / "seen"))
+    spec = importlib.util.spec_from_file_location(
+        "b2", os.path.expanduser("~/.claude/hooks/broadcast.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    assert m.BUS == str(tmp_path / "b.jsonl")
+    m.publish("note", "isolated", "sess-A")
+    assert os.path.exists(m.BUS)
