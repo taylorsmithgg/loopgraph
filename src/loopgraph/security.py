@@ -17,7 +17,13 @@ import json
 import os
 import time
 
-QUEUE = os.path.join(os.path.expanduser("~"), ".loopgraph", "security.jsonl")
+# Overridable so a guard that must exercise the retain path does not file its
+# own probe as a finding. SECURITYQUIET ran a real `mem retain` on every
+# evaluation and queued a sensitive-looking test string each time -- ten copies
+# of it were sitting on top of an open account compromise. A guard that fills
+# the queue it guards is worse than no guard.
+QUEUE = os.environ.get("LOOPGRAPH_SECURITY_QUEUE") or os.path.join(
+    os.path.expanduser("~"), ".loopgraph", "security.jsonl")
 REVIEWED = os.path.join(os.path.expanduser("~"), ".loopgraph", "security.reviewed")
 
 
