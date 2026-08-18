@@ -55,8 +55,53 @@ def default_db_path(cwd: str | None = None) -> str:
     return os.path.join(d, f"{h}.db")
 
 
-def project_root(cwd: str | None = None) -> str:
+def project_from_transcript(transcript_path: str | None) -> str | None:
+    """The session's project, decoded from where its transcript lives.
+
+    The shell's working directory is NOT the session's project. It persists
+    between tool calls, so one `cd` into another repo moves it for the rest of
+    the session -- and passing the hook payload's cwd instead of os.getcwd()
+    did not fix that, because the payload reports the same drifted value. It
+    only changed which drifting number was used, which is worse than the
+    original bug for being harder to see: the goal was recorded in $HOME's
+    graph and then demanded out of the loopgraph repo's, and `status` from
+    $HOME showed it empty while the gate quoted it verbatim.
+
+    Claude Code names a transcript directory after the absolute path the
+    session started in, separators turned into dashes. That does not move.
+    Decoding is ambiguous where a real directory contains a dash, so each
+    candidate split is checked against the filesystem and the deepest real one
+    wins. KNOWN LIMIT: only the final component may contain dashes. A dash in
+    a middle component (`/Users/x/my-repo/sub`) is not resolved and this
+    returns None, so the caller falls back to cwd -- the same behaviour as
+    before, rather than a confident wrong answer. Every project directory on
+    this machine decodes; the limit is recorded because the failure is silent.
+    """
+    import os
+    if not transcript_path:
+        return None
+    slug = os.path.basename(os.path.dirname(transcript_path))
+    if not slug.startswith("-"):
+        return None
+    parts = slug.lstrip("-").split("-")
+    # Longest real path wins. A dash in the slug is either a separator or a
+    # literal dash in a directory name, and only the filesystem knows which,
+    # so every split point is tried from the deepest down.
+    for i in range(len(parts), 0, -1):
+        head = "/" + "/".join(parts[:i])
+        tail = parts[i:]
+        cand = head if not tail else os.path.join(head, "-".join(tail))
+        if os.path.isdir(cand):
+            return cand
+    return None
+
+
+def project_root(cwd: str | None = None,
+                 transcript_path: str | None = None) -> str:
     """The directory a graph is keyed on, resolved the same way as its path."""
+    from_transcript = project_from_transcript(transcript_path)
+    if from_transcript:
+        return from_transcript
     import os
     import subprocess
     root = cwd or os.getcwd()
@@ -70,7 +115,8 @@ def project_root(cwd: str | None = None) -> str:
     return root
 
 
-def open_project_db(cwd: str | None = None):
+def open_project_db(cwd: str | None = None,
+                    transcript_path: str | None = None):
     """Open this project's graph AND record which directory it belongs to.
 
     The filename is a truncated sha256 of the root and does not invert, so
@@ -81,8 +127,8 @@ def open_project_db(cwd: str | None = None):
     to a project is one nobody will ever pick up. Stamping it costs one row.
     """
     from .db import open_db, meta_get, meta_set
-    root = project_root(cwd)
-    conn = open_db(default_db_path(cwd))
+    root = project_root(cwd, transcript_path)
+    conn = open_db(default_db_path(root))
     if meta_get(conn, "root", None) != root:
         meta_set(conn, "root", root)
     return conn

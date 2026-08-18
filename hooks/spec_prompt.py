@@ -65,7 +65,7 @@ def main() -> int:
         from loopgraph.db import open_db
         from loopgraph.graph import all_criteria
 
-        conn = coord.open_project_db(ev.get("cwd"))
+        conn = coord.open_project_db(ev.get("cwd"), ev.get("transcript_path"))
         if not coord.loop_enabled(conn):
             return 0
         goalish = [c for c in all_criteria(conn)

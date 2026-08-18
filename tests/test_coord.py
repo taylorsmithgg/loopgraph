@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -351,3 +352,58 @@ def test_default_db_path_uses_git_toplevel_of_the_given_dir(tmp_path, monkeypatc
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
     monkeypatch.chdir(tmp_path)
     assert coord.default_db_path(str(repo / "sub")) == coord.default_db_path(str(repo))
+
+
+def test_project_comes_from_the_transcript_not_the_drifting_shell(monkeypatch):
+    """The shell's cwd is not the session's project: it persists between tool
+    calls, so one `cd` moves it for the rest of the session. Passing the hook
+    payload's cwd did NOT fix that -- the payload reports the same drifted
+    value. Observed live: the goal was recorded in $HOME's graph and then
+    demanded out of the loopgraph repo's, while `status` from $HOME showed it
+    empty and the gate quoted it verbatim.
+
+    Real paths, because pytest's own tmp directory contains dashes in middle
+    components ("pytest-of-<user>") which the decoder deliberately declines.
+    """
+    from loopgraph import coord
+    home = os.path.expanduser("~")
+    drifted = os.path.join(home, "projects")
+    if not os.path.isdir(drifted):
+        pytest.skip("needs ~/projects")
+    slug = "-" + home.lstrip("/").replace("/", "-")
+    tp = os.path.join(home, ".claude", "projects", slug, "s.jsonl")
+    monkeypatch.chdir(drifted)
+    assert coord.project_root(drifted, tp) == home
+    # and with no transcript it still honours cwd, as before
+    assert coord.project_root(drifted, None) == drifted
+
+
+def test_a_directory_name_containing_dashes_round_trips(tmp_path):
+    """A dash in the slug is either a separator or a literal dash in a
+    directory name, and only the filesystem knows which."""
+    from loopgraph import coord
+    # The real case this exists for, using a real path on this machine.
+    real = "/Users/taylorsmith/projects/clearwater/msc-file-management-service"
+    if not os.path.isdir(real):
+        pytest.skip("needs that project checked out")
+    slug = "-" + real.lstrip("/").replace("/", "-")
+    tp = f"/Users/taylorsmith/.claude/projects/{slug}/s.jsonl"
+    assert coord.project_from_transcript(tp) == real
+
+
+def test_a_dash_in_a_middle_component_falls_back_rather_than_guessing(tmp_path):
+    """Known limit, recorded because the failure is silent: only the final
+    component may contain dashes. Returning None sends the caller back to cwd,
+    which is the old behaviour, rather than a confident wrong answer."""
+    from loopgraph import coord
+    d = tmp_path / "my-repo" / "sub"
+    d.mkdir(parents=True)
+    slug = "-" + str(d).lstrip("/").replace("/", "-")
+    tp = str(tmp_path / ".claude" / "projects" / slug / "s.jsonl")
+    assert coord.project_from_transcript(tp) is None
+
+
+def test_an_unrecognisable_slug_falls_back_rather_than_guessing(tmp_path):
+    from loopgraph import coord
+    tp = str(tmp_path / "p" / "-no-such-path-anywhere-at-all" / "s.jsonl")
+    assert coord.project_from_transcript(tp) is None
