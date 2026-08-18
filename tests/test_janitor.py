@@ -212,3 +212,16 @@ def test_find_can_exclude_closed_criteria(tmp_path):
 
 def test_find_is_empty_for_an_empty_query(tmp_path):
     assert janitor.find("  ", loopgraph_dir=str(tmp_path), home=str(tmp_path)) == []
+
+
+def test_scan_does_not_read_the_real_corpus_when_given_a_tmp_dir(tmp_path):
+    """A tmp directory must isolate everything. memory_health defaulted to
+    $HOME and so reported on production state from inside a unit test --
+    which is how a test starts passing or failing for reasons unrelated to
+    the code under it."""
+    d = str(tmp_path)
+    _graph(d, "b" * 15 + "c", [])
+    health = janitor.scan(loopgraph_dir=d, home=d)["memory"]
+    assert health["files"] == 0
+    assert health["searchable"] in (None, 0)
+    assert health["unconcluded"] == 0

@@ -71,9 +71,17 @@ def _root_index(home: str | None = None) -> dict[str, str]:
             for r in _candidate_roots(home)}
 
 
-def scan(loopgraph_dir: str | None = None, home: str | None = None) -> dict:
+def scan(loopgraph_dir: str | None = None, home: str | None = None,
+         corpus: str | None = None) -> dict:
     """Every loose end on this machine, as data. No printing, no truncation."""
+    # An explicit loopgraph_dir means "look only here" -- so the corpus is
+    # resolved inside it too. Defaulting the corpus to $HOME while honouring
+    # the caller's directory for everything else is a half-boundary, and a
+    # half-boundary is how a unit test ends up asserting against production.
+    scoped = loopgraph_dir is not None
     d = loopgraph_dir or os.path.join(os.path.expanduser("~"), ".loopgraph")
+    if corpus is None and scoped:
+        corpus = os.path.join(d, "memory")
     index = _root_index(home)
     goals, crits, unreadable, empty, graphs = [], [], [], [], 0
 
@@ -158,7 +166,11 @@ def scan(loopgraph_dir: str | None = None, home: str | None = None) -> dict:
     crits.sort(key=key)
     return {"graphs": graphs, "goals": goals, "criteria": crits,
             "unreadable": unreadable, "empty": empty,
-            "memory": memory_health()}
+            # Derived from the directory under scan, not from $HOME: passing a
+            # tmp dir must isolate EVERYTHING, or a test quietly reads the
+            # real corpus and reports on production state.
+            "memory": memory_health(db=os.path.join(d, "memory.db"),
+                                    corpus=corpus)}
 
 
 def memory_health(corpus: str | None = None, db: str | None = None) -> dict:
@@ -176,7 +188,8 @@ def memory_health(corpus: str | None = None, db: str | None = None) -> dict:
         os.path.expanduser("~"), ".claude", "projects",
         "-Users-taylorsmith", "memory")
     out = {"unindexed": [], "dead_links": [], "files": 0, "indexed": 0,
-           "searchable": None}
+           "searchable": None, "unconcluded": 0, "conclusions": 0,
+           "experiences": 0}
     index_path = os.path.join(corpus, "MEMORY.md")
     if not os.path.isdir(corpus) or not os.path.isfile(index_path):
         return out
@@ -197,6 +210,24 @@ def memory_health(corpus: str | None = None, db: str | None = None) -> dict:
             "select count(*) from nodes where type = 'memory'").fetchone()[0]
         c.close()
     except sqlite3.Error:
+        pass
+    # Recording what happened is not learning from it. The distillation step
+    # -- experience into a stated conclusion -- is the one every published
+    # design puts at the centre of self-improvement, it is already built here
+    # as `mem reflect`, and it had been run four times ever against a corpus
+    # that is 4% conclusions. A capability nobody invokes is indistinguishable
+    # from one that was never written, so the backlog surfaces itself.
+    try:
+        from . import memory as _mem
+        conn = _mem.open_memory(db)
+        kinds = {}
+        for r in conn.execute("select id from nodes where type = 'memory'"):
+            k = _mem.mem_meta(conn, r[0]).get("kind", "world")
+            kinds[k] = kinds.get(k, 0) + 1
+        out["conclusions"] = kinds.get("model", 0)
+        out["experiences"] = kinds.get("experience", 0)
+        out["unconcluded"] = len(_mem.reflect(conn))
+    except Exception:
         pass
     return out
 
@@ -289,7 +320,8 @@ def digest(max_lines: int = DEFAULT_MAX_LINES, stale_days: int = STALE_DAYS,
              if c["age"] is None or c["age"] >= stale_days]
     bad = data.get("unreadable") or []
     mem = data.get("memory") or {}
-    mem_bad = bool(mem.get("unindexed") or mem.get("dead_links"))
+    mem_bad = bool(mem.get("unindexed") or mem.get("dead_links")
+                   or mem.get("unconcluded"))
     if not goals and not crits and not bad and not mem_bad:
         return ""
 
@@ -332,6 +364,11 @@ def digest(max_lines: int = DEFAULT_MAX_LINES, stale_days: int = STALE_DAYS,
         if mem.get("dead_links"):
             lines.append(f"  {len(mem['dead_links'])} index entr(ies) with no file: "
                          f"{', '.join(mem['dead_links'][:3])}")
+        if mem.get("unconcluded"):
+            lines.append(
+                f"  {mem['unconcluded']} clusters of experience with no conclusion "
+                f"drawn ({mem['conclusions']} conclusions vs "
+                f"{mem['experiences']} experiences) - `mem reflect`")
     n_empty = len(data.get("empty") or [])
     if n_empty:
         lines.append(f"{n_empty} empty graphs hold nothing "
