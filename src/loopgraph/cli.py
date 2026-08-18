@@ -151,6 +151,21 @@ def _mem(args) -> int:
         if not args.no_file:
             memory.write_markdown(args.corpus, mid, text, args.kind,
                                   tags=tags, source=args.source)
+        # A corrected belief is the one thing worth interrupting other
+        # sessions for: five run at once here, and until this existed they
+        # would keep acting on the superseded version until someone re-read
+        # the corpus the next day.
+        if args.supersedes:
+            try:
+                import importlib.util as _ilu
+                _s = _ilu.spec_from_file_location("bcast", os.path.expanduser(
+                    "~/.claude/hooks/broadcast.py"))
+                _m = _ilu.module_from_spec(_s); _s.loader.exec_module(_m)
+                _m.publish("belief corrected",
+                           f"{args.supersedes} is superseded: {text[:220]}",
+                           os.environ.get("CLAUDE_CODE_BRIDGE_SESSION_ID", ""))
+            except Exception:
+                pass                    # broadcasting must never fail a retain
         why = memory.sensitivity(text)
         if why:
             print(f"retained as sensitive ({'; '.join(why)}): withheld from "

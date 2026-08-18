@@ -60,6 +60,47 @@ def _informative(rows: list[dict]) -> list[dict]:
     return out
 
 
+# What the correction was ABOUT. Mined from 51 real corrections: the counts
+# were 16 / 9 / 9 / 2 / 1 in this order, so the ranking is not hypothetical.
+# A list of complaints is not usable; the CLASS is, because it names what to
+# do differently on the next turn.
+CORRECTION_CLASSES = (
+    ("asserted without verifying",
+     r"incorrect|not true|false|no way|wrong about|"
+     r"you must be doing something wrong|seems incorrect|you say this",
+     "produce claims about system behaviour by RUNNING the system"),
+    ("declared done while still broken",
+     r"still (?:not|broken|failing|incorrect)|didn'?t work|not fixed|"
+     r"doesn'?t work|not capturing|feels broken",
+     "verify the effect, not the status"),
+    ("looked in the wrong place",
+     r"looking in the wrong|wrong spot|wrong place|you didn'?t (?:look|check)|"
+     r"missed|not seeing",
+     "widen the query before concluding absence"),
+    ("stopped early",
+     r"you broke|pausing|gave up|why did you stop|keep going|finish",
+     "finish the work; report blockers without stopping on them"),
+    ("ignored an instruction",
+     r"follow instructions|i (?:said|told you)|as i said|already told",
+     "re-read the instruction before the next action"),
+)
+
+
+def _classify(corrections: list[str]) -> list[dict]:
+    """Rank correction classes. Empty when there is nothing to say."""
+    import re
+    tally: dict[str, int] = {}
+    advice: dict[str, str] = {}
+    for text in corrections:
+        for name, pattern, how in CORRECTION_CLASSES:
+            if re.search(pattern, text, re.I):
+                tally[name] = tally.get(name, 0) + 1
+                advice[name] = how
+                break
+    return [{"class": k, "count": v, "advice": advice[k]}
+            for k, v in sorted(tally.items(), key=lambda kv: -kv[1])]
+
+
 def run(corpus_roots: list[str] | None = None, min_sessions: int = 5,
         since_days: float = 30.0, state_path: str | None = None) -> dict:
     """Mine, reflect, and write the candidates down. Returns what it wrote."""
@@ -106,10 +147,13 @@ def run(corpus_roots: list[str] | None = None, min_sessions: int = 5,
                       for r in recurring],
         "corrections": [c["text"][:180]
                         for c in got.get("corrections", [])][-MAX_CORRECTIONS:],
+        "correction_classes": _classify(
+            [c["text"] for c in got.get("corrections", [])]),
         "unconcluded": [{"about": c.get("about", [])[:4],
                          "members": c.get("members", [])[:4]}
                         for c in clusters],
         "kinds": kinds,
+        "window_days": since_days,
     }
     path = state_path or STATE
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -153,8 +197,18 @@ def digest(state_path: str | None = None, max_lines: int = 8) -> str:
                      f"candidates are stale and the schedule may be dead.")
     recurring = d.get("recurring") or []
     unconcluded = d.get("unconcluded") or []
-    if not recurring and not unconcluded and age <= 48:
+    classes = d.get("correction_classes") or []
+    if not recurring and not unconcluded and not classes and age <= 48:
         return ""
+    # The most valuable thing this job collects, and the easiest to leave on
+    # the floor: it was gathered every night and shown to nobody until someone
+    # asked what else was being missed. A ranked failure mode is the only
+    # output here that describes the agent rather than the estate.
+    if classes:
+        top = classes[0]
+        lines.append(f"corrections in the last {int(d.get('window_days', 30))}d: "
+                     f"{sum(c['count'] for c in classes)}. Most common: "
+                     f"{top['class']} ({top['count']}) -- {top['advice']}.")
     if recurring:
         lines.append(f"recurring across sessions, not yet in memory "
                      f"({len(recurring)}):")
