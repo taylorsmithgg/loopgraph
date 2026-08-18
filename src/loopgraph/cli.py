@@ -489,6 +489,13 @@ def main(argv: list[str] | None = None) -> int:
     fa.add_argument("--text", default="")
     fa.add_argument("--tags", default="")
 
+    ds = sub.add_parser("distill")
+    ds.add_argument("--run", action="store_true",
+                    help="mine now and write the candidate file (what the schedule calls)")
+    ds.add_argument("--json", action="store_true")
+    ds.add_argument("--min-sessions", type=int, default=5)
+    ds.add_argument("--since-days", type=float, default=30.0)
+
     jn = sub.add_parser("janitor")
     jn.add_argument("--max-lines", type=int, default=20)
     jn.add_argument("--stale-days", type=int, default=3)
@@ -514,6 +521,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.db is None:
         args.db = coord.default_db_path()
     conn = open_db(args.db)
+
+    if args.cmd == "distill":
+        from . import distill as _dist
+        if args.run:
+            got = _dist.run(min_sessions=args.min_sessions,
+                            since_days=args.since_days)
+            print(f"distilled: scanned {got['scanned']} transcripts, "
+                  f"{len(got['recurring'])} recurring, "
+                  f"{len(got['unconcluded'])} unconcluded clusters, "
+                  f"{len(got['corrections'])} corrections")
+            return 0
+        if args.json:
+            print(json.dumps(_dist.load(), indent=2))
+            return 0
+        print(_dist.digest() or "distill: nothing new")
+        return 0
 
     if args.cmd == "janitor":
         from . import janitor as _jan

@@ -30,6 +30,15 @@ def main() -> int:
             parts.append(janitor.digest(max_lines=12))
         except Exception:
             pass                      # a janitor must never break a session
+        # What the scheduled distillation found. Reads a file written by
+        # launchd overnight -- mining 1,476 transcripts here would put seconds
+        # on every session start, and a brief that slows the session down gets
+        # removed, which returns the whole thing to being manual.
+        try:
+            from loopgraph import distill
+            parts.append(distill.digest(max_lines=8))
+        except Exception:
+            pass
         text = "\n\n".join(p for p in parts if p and p.strip())
         if not text:
             return 0

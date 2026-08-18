@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.taylorsmith.loopgraph.distill</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{UV}}</string>
+    <string>run</string>
+    <string>--project</string>
+    <string>{{LOOPGRAPH}}</string>
+    <string>loopgraph</string>
+    <string>distill</string>
+    <string>--run</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>6</integer><key>Minute</key><integer>20</integer></dict>
+  <key>RunAtLoad</key><false/>
+  <key>StandardOutPath</key><string>{{HOME}}/.loopgraph/distill.log</string>
+  <key>StandardErrorPath</key><string>{{HOME}}/.loopgraph/distill.err</string>
+  <key>WorkingDirectory</key><string>{{HOME}}</string>
+</dict>
+</plist>
