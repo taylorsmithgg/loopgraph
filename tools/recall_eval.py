@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """Does recall find things when you do NOT already know their wording?
 
+CONTAMINATED -- do not quote this number as a measure of quality. The query
+alias table in memory.py was written while looking at this eval's misses
+(customer->tenant, desktop->avd, amazon->s3, bound->timeout each map onto a
+case below), which is training on the test set. It briefly read 12/12 and
+that meant nothing. Kept because it is still a useful regression signal on
+the tuned vocabulary; for a number you can believe, use
+tools/recall_eval_holdout.py, whose cases the tuning never saw.
+
 Querying a memory with its own description scores 100% and proves nothing --
 the description shares the body's vocabulary. These queries deliberately avoid
 it, the way a person actually asks: "customer" for a corpus that says
