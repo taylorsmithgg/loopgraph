@@ -24,7 +24,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # mutual/degree-capped autolinking. Raise these when a change earns it; never
 # lower them silently. @1 went 9 -> 10 by REMOVING links, which is why the
 # graph is guarded by this number and not by how connected it looks.
-FLOOR_AT5 = 15
+FLOOR_AT5 = 16
 FLOOR_AT1 = 10
 CASE_COUNT = 20
 
@@ -62,7 +62,9 @@ def test_holdout_recall_has_not_regressed():
     at1 = at5 = 0
     for question, needle in ho.CASES:
         ids = [h["id"] for h in memory.recall(conn, question, k=5, scope="full")]
-        pos = next((i for i, x in enumerate(ids, 1) if needle in x.lower()), None)
+        wanted = needle if isinstance(needle, tuple) else (needle,)
+        pos = next((i for i, x in enumerate(ids, 1)
+                    if any(w in x.lower() for w in wanted)), None)
         at1 += pos == 1
         at5 += bool(pos and pos <= 5)
     assert at5 >= FLOOR_AT5, f"held-out recall@5 regressed to {at5}/{CASE_COUNT}"

@@ -37,7 +37,13 @@ CASES = [
     ("letting a laptop in india reach US-only services", "tailscale"),
     ("we have no delegated admin rights into that partner tenant", "gdap"),
     ("telemetry keeps failing to send and retrying forever", "otel_export"),
-    ("I said it worked without actually checking", "recurring-failure-mode"),
+    # Two memories answer this equally well -- the specific self-analysis note
+    # and the general failure-class note. A single-answer label scored the
+    # better answer as a miss, so the needle accepts either. Label staleness
+    # is not a ranking regression, and treating it as one would have argued
+    # for lowering the floor.
+    ("I said it worked without actually checking",
+     ("recurring-failure-mode", "dead_but_looks_alive")),
     ("which client does this azure subscription belong to", "lighthouse_client_mapping"),
     ("can a small model tell when it is unsure", "reach-engine"),
     ("where does agent memory live across tools", "memory_across_harnesses"),
@@ -52,7 +58,9 @@ def main() -> int:
     for question, needle in CASES:
         hits = memory.recall(conn, question, k=5, scope="full")
         ids = [h["id"] for h in hits]
-        pos = next((i for i, x in enumerate(ids, 1) if needle in x.lower()), None)
+        wanted = needle if isinstance(needle, tuple) else (needle,)
+        pos = next((i for i, x in enumerate(ids, 1)
+                    if any(w in x.lower() for w in wanted)), None)
         at1 += pos == 1
         at5 += bool(pos and pos <= 5)
         if not pos:
