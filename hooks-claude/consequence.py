@@ -28,12 +28,14 @@ Scope is deliberately narrow. Only files that other sessions load: settings,
 the hooks themselves, and the global instructions. Editing project code is not
 shared state and never triggers this.
 
-Detection is by MTIME, not by intercepting the write. The first version hooked
-PostToolUse(Write|Edit) and recorded nothing at all, because this agent edits
-config with `python3 - <<PY` inside Bash -- the guard could not see the very
-edits it existed to catch, which is the third instance today of a guard blind
-to its own subject. Watching the file is unbypassable: however the change was
-made, the mtime moved.
+Detection is by CONTENT HASH, not by intercepting the write and not by mtime.
+The first version hooked PostToolUse(Write|Edit) and recorded nothing at all,
+because this agent edits config with `python3 - <<PY` inside Bash -- blind to
+the very edits it existed to catch. Mtime fixed that and immediately produced
+its own false positive: a `touch` in a test fired the guard for a file whose
+bytes were identical, and `cp`, `git checkout` and a restored backup all do
+the same. Hashing answers the question actually being asked -- did the
+configuration other sessions load CHANGE -- rather than a proxy for it.
 """
 import json
 import os
@@ -42,6 +44,7 @@ import time
 
 PENDING = os.path.expanduser("~/.loopgraph/consequence.jsonl")
 ANSWERED_DIR = os.path.expanduser("~/.loopgraph/consequence-seen")
+SNAPSHOT_DIR = os.path.expanduser("~/.loopgraph/consequence-snap")
 
 SHARED = (
     os.path.expanduser("~/.claude/settings.json"),
@@ -85,28 +88,47 @@ def _files() -> list[str]:
     return out
 
 
+def _digest() -> dict:
+    import hashlib
+    out = {}
+    for f in _files():
+        try:
+            with open(f, "rb") as fh:
+                out[f] = hashlib.sha256(fh.read()).hexdigest()[:16]
+        except OSError:
+            continue
+    return out
+
+
+def _snap_path(session: str = "") -> str:
+    s = session or _session()
+    safe = "".join(c for c in s if c.isalnum() or c in "-_") or "unknown"
+    return os.path.join(SNAPSHOT_DIR, safe + ".json")
+
+
 def outstanding(_session: str = "") -> list[str]:
-    """Shared files changed since the last answer. State, not events."""
-    since = _answered_at()
-    if since <= 0:
+    """Shared files whose CONTENT differs from this session's last snapshot."""
+    now = _digest()
+    try:
+        with open(_snap_path(), encoding="utf-8") as fh:
+            before = json.load(fh)
+    except (OSError, ValueError):
         # First run: adopt the current state rather than reporting every
         # config file on the machine as an unanswered change.
         answer("baseline adopted on first run")
         return []
-    changed = []
-    for f in _files():
-        try:
-            if os.path.getmtime(f) > since:
-                changed.append(f)
-        except OSError:
-            continue
-    return sorted(changed)
+    changed = [f for f, h in now.items() if before.get(f) != h]
+    changed += [f for f in before if f not in now]        # deletions count too
+    return sorted(set(changed))
 
 
 def answer(text: str) -> None:
     os.makedirs(ANSWERED_DIR, exist_ok=True)
+    os.makedirs(SNAPSHOT_DIR, exist_ok=True)
     with open(_mark_path(), "w", encoding="utf-8") as fh:
         fh.write(str(time.time()))
+    with open(_snap_path(), "w", encoding="utf-8") as fh:
+        json.dump(_digest(), fh)
     try:
         with open(PENDING + ".log", "a", encoding="utf-8") as fh:
             fh.write(json.dumps({"ts": time.time(), "answer": text[:500]}) + "\n")
