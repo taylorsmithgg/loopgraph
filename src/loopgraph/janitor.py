@@ -55,8 +55,14 @@ def _candidate_roots(home: str | None = None) -> list[str]:
     home = home or os.path.expanduser("~")
     roots = [home]
     for depth in ("*", "*/*", "*/*/*"):
+        # .git repos AND plain container directories. Guessing only at git
+        # repos left 17 graphs unattributable: ~/projects/clearwater is a
+        # container, not a repo, and it keys a graph holding nine criteria.
         for g in glob.glob(os.path.join(home, "projects", depth, ".git")):
             roots.append(os.path.dirname(g))
+        for d in glob.glob(os.path.join(home, "projects", depth)):
+            if os.path.isdir(d):
+                roots.append(d)
     return roots
 
 
@@ -69,7 +75,7 @@ def scan(loopgraph_dir: str | None = None, home: str | None = None) -> dict:
     """Every loose end on this machine, as data. No printing, no truncation."""
     d = loopgraph_dir or os.path.join(os.path.expanduser("~"), ".loopgraph")
     index = _root_index(home)
-    goals, crits, unreadable, graphs = [], [], [], 0
+    goals, crits, unreadable, empty, graphs = [], [], [], [], 0
 
     for path in sorted(glob.glob(os.path.join(d, "*.db"))):
         name = os.path.basename(path)
@@ -81,17 +87,23 @@ def scan(loopgraph_dir: str | None = None, home: str | None = None) -> dict:
         except sqlite3.Error:
             continue
         key = name[:-3]
-        where = index.get(key, key[:8])
         try:
             meta = {r["key"]: r["value"] for r in conn.execute("select key, value from meta")}
         except sqlite3.Error:
             conn.close()
             continue
         graphs += 1
+        # Stamped root first, guess second. A graph whose directory is gone
+        # holds criteria that can never be satisfied again -- scratch dirs,
+        # deleted worktrees -- and saying so is what makes drop-or-keep
+        # decidable. Unknown is NOT the same as gone, and is reported apart.
+        root = meta.get("root") or index.get(key)
+        gone = bool(root) and not os.path.isdir(root)
+        where = root or key[:8]
 
         goal = (meta.get("goal_pending") or "").strip()
         if goal:
-            goals.append({"where": where, "goal": goal,
+            goals.append({"where": where, "goal": goal, "gone": gone,
                           "age": _age_days(meta.get("goal_pending_at"))})
 
         # `meta_json` is added lazily by coord.ensure_schema, so a graph that
@@ -126,19 +138,67 @@ def scan(loopgraph_dir: str | None = None, home: str | None = None) -> dict:
             except (ValueError, IndexError, KeyError):
                 flags = {}
             crits.append({
-                "where": where, "id": r["id"],
+                "where": where, "gone": gone,
+                "root_known": bool(root), "id": r["id"],
                 "statement": (r["statement"] or "").strip(),
                 "age": _age_days(r["created_at"]),
                 "state": "never-run" if run is None else "failing",
                 "owner": flags.get("session", ""),
             })
+        if not rows and not goal:
+            try:
+                if conn.execute("select count(*) from nodes").fetchone()[0] == 0:
+                    empty.append(path)
+            except sqlite3.Error:
+                pass
         conn.close()
 
     key = lambda x: -(x["age"] if x["age"] is not None else -1)
     goals.sort(key=key)
     crits.sort(key=key)
     return {"graphs": graphs, "goals": goals, "criteria": crits,
-            "unreadable": unreadable}
+            "unreadable": unreadable, "empty": empty,
+            "memory": memory_health()}
+
+
+def memory_health(corpus: str | None = None, db: str | None = None) -> dict:
+    """Is the memory corpus actually reachable?
+
+    Three stores have to agree: the markdown files (the truth), MEMORY.md
+    (what a session loads) and the search index (what recall queries). A file
+    missing from MEMORY.md is invisible to every session while looking
+    perfectly present on disk -- that is not hypothetical, it hid a global
+    ban on a word from enforcement for ten days, and it was found by hand.
+    Anything found by hand once should be found automatically thereafter.
+    """
+    import re
+    corpus = corpus or os.path.join(
+        os.path.expanduser("~"), ".claude", "projects",
+        "-Users-taylorsmith", "memory")
+    out = {"unindexed": [], "dead_links": [], "files": 0, "indexed": 0,
+           "searchable": None}
+    index_path = os.path.join(corpus, "MEMORY.md")
+    if not os.path.isdir(corpus) or not os.path.isfile(index_path):
+        return out
+    try:
+        listed = set(re.findall(r"^-\s*\[([^\]]+)\]",
+                                open(index_path, errors="replace").read(), re.M))
+        files = {os.path.basename(f) for f in glob.glob(os.path.join(corpus, "*.md"))
+                 if not os.path.basename(f).startswith("MEMORY")}
+    except OSError:
+        return out
+    out["unindexed"] = sorted(files - listed)
+    out["dead_links"] = sorted(listed - files)
+    out["files"], out["indexed"] = len(files), len(listed)
+    db = db or os.path.join(os.path.expanduser("~"), ".loopgraph", "memory.db")
+    try:
+        c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        out["searchable"] = c.execute(
+            "select count(*) from nodes where type = 'memory'").fetchone()[0]
+        c.close()
+    except sqlite3.Error:
+        pass
+    return out
 
 
 def _short(where: str, home: str | None = None) -> str:
@@ -164,7 +224,9 @@ def digest(max_lines: int = DEFAULT_MAX_LINES, stale_days: int = STALE_DAYS,
     crits = [c for c in data["criteria"]
              if c["age"] is None or c["age"] >= stale_days]
     bad = data.get("unreadable") or []
-    if not goals and not crits and not bad:
+    mem = data.get("memory") or {}
+    mem_bad = bool(mem.get("unindexed") or mem.get("dead_links"))
+    if not goals and not crits and not bad and not mem_bad:
         return ""
 
     lines = [f"loopgraph janitor: {len(crits)} open criteria and {len(goals)} "
@@ -178,7 +240,8 @@ def digest(max_lines: int = DEFAULT_MAX_LINES, stale_days: int = STALE_DAYS,
         lines.append("open criteria (never closed, oldest first):")
         for c in crits[:half]:
             age = "?" if c["age"] is None else f"{c['age']}d"
-            lines.append(f"  {age:>4} {_short(c['where'], home)} {c['id']}: "
+            tag = " [dir gone]" if c.get("gone") else ""
+            lines.append(f"  {age:>4} {_short(c['where'], home)} {c['id']}{tag}: "
                          f"{c['statement'][:70]}")
             shown += 1
         if len(crits) > half:
@@ -196,6 +259,19 @@ def digest(max_lines: int = DEFAULT_MAX_LINES, stale_days: int = STALE_DAYS,
             lines.append(f"  {age:>4} {_short(g['where'], home)}: {g['goal'][:70]}")
         if len(goals) > rest:
             lines.append(f"  +{len(goals) - rest} more")
+    if mem_bad:
+        lines.append("memory corpus:")
+        if mem.get("unindexed"):
+            lines.append(f"  {len(mem['unindexed'])} file(s) missing from MEMORY.md "
+                         f"- invisible to every session: "
+                         f"{', '.join(mem['unindexed'][:3])}")
+        if mem.get("dead_links"):
+            lines.append(f"  {len(mem['dead_links'])} index entr(ies) with no file: "
+                         f"{', '.join(mem['dead_links'][:3])}")
+    n_empty = len(data.get("empty") or [])
+    if n_empty:
+        lines.append(f"{n_empty} empty graphs hold nothing "
+                     f"(`loopgraph janitor --reap --apply` removes them)")
     return "\n".join(lines)
 
 
@@ -211,6 +287,14 @@ def reap(stale_days: int = 14, loopgraph_dir: str | None = None,
     d = loopgraph_dir or os.path.join(os.path.expanduser("~"), ".loopgraph")
     index = _root_index(home)
     done = []
+    for path in (scan(loopgraph_dir=d, home=home).get("empty") or []):
+        done.append(f"empty graph {os.path.basename(path)}")
+        if not dry_run:
+            for suffix in ("", "-wal", "-shm"):
+                try:
+                    os.remove(path + suffix)
+                except OSError:
+                    pass
     for path in sorted(glob.glob(os.path.join(d, "*.db"))):
         if os.path.basename(path) == "memory.db":
             continue

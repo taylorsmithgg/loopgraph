@@ -24,7 +24,7 @@ def main() -> int:
     try:
         from loopgraph import coord
         from loopgraph.db import open_db
-        conn = open_db(coord.default_db_path(ev.get("cwd")))
+        conn = coord.open_project_db(ev.get("cwd"))
         if not coord.is_enabled(conn):
             return 0
         freed = coord.agent_done(conn, agent, outcome="returned")

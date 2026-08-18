@@ -55,6 +55,39 @@ def default_db_path(cwd: str | None = None) -> str:
     return os.path.join(d, f"{h}.db")
 
 
+def project_root(cwd: str | None = None) -> str:
+    """The directory a graph is keyed on, resolved the same way as its path."""
+    import os
+    import subprocess
+    root = cwd or os.getcwd()
+    try:
+        out = subprocess.run(["git", "-C", root, "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=5)
+        if out.returncode == 0 and out.stdout.strip():
+            root = out.stdout.strip()
+    except Exception:
+        pass
+    return root
+
+
+def open_project_db(cwd: str | None = None):
+    """Open this project's graph AND record which directory it belongs to.
+
+    The filename is a truncated sha256 of the root and does not invert, so
+    without this the only way back to a human-readable name is to guess the
+    plausible roots and hash them. That guess was wrong for 17 graphs holding
+    41 criteria -- container directories that are not git repos, and scratch
+    directories that no longer exist -- and a criterion you cannot attribute
+    to a project is one nobody will ever pick up. Stamping it costs one row.
+    """
+    from .db import open_db, meta_get, meta_set
+    root = project_root(cwd)
+    conn = open_db(default_db_path(cwd))
+    if meta_get(conn, "root", None) != root:
+        meta_set(conn, "root", root)
+    return conn
+
+
 def is_enabled(conn: sqlite3.Connection) -> bool:
     """On by default. Safe because the gate is inert until a dispatch
     declares a SCOPE: line -- it cannot affect work that never opted in.

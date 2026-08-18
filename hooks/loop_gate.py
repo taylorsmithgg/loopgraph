@@ -50,7 +50,7 @@ def main() -> int:
         from loopgraph.rules import terminal_state, tick
         from loopgraph.state import derive_status, record_status
 
-        conn = open_db(coord.default_db_path(ev.get("cwd")))
+        conn = coord.open_project_db(ev.get("cwd"))
         if not coord.loop_enabled(conn):
             return 0
         # Breadcrumb: if the hook and the CLI ever disagree about who this

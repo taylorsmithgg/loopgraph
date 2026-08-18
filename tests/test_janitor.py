@@ -123,3 +123,57 @@ def test_criteria_are_found_on_a_graph_with_no_meta_json_column(tmp_path):
     c.commit()
     data = janitor.scan(loopgraph_dir=d, home=d)
     assert [x["id"] for x in data["criteria"]] == ["C1"]
+
+
+def test_a_criterion_whose_directory_is_gone_is_marked(tmp_path):
+    """Scratch dirs and deleted worktrees leave criteria that can never be
+    satisfied. Saying so is what makes drop-or-keep decidable -- the same
+    reason the loose note carries an age."""
+    d = str(tmp_path)
+    conn = _graph(d, "7" * 16, [("C1", "f.txt says done", "false")])
+    meta_set(conn, "root", str(tmp_path / "long-deleted-scratch"))
+    conn.commit()
+    data = janitor.scan(loopgraph_dir=d, home=d)
+    assert data["criteria"][0]["gone"] is True
+    assert "[dir gone]" in janitor.digest(stale_days=0, loopgraph_dir=d, home=d)
+
+
+def test_a_live_directory_is_not_marked_gone(tmp_path):
+    d = str(tmp_path)
+    live = tmp_path / "still-here"; live.mkdir()
+    conn = _graph(d, "6" * 16, [("C1", "real work", "false")])
+    meta_set(conn, "root", str(live)); conn.commit()
+    data = janitor.scan(loopgraph_dir=d, home=d)
+    assert data["criteria"][0]["gone"] is False
+    assert data["criteria"][0]["where"] == str(live)
+
+
+def test_empty_graphs_are_counted_and_reaped(tmp_path):
+    d = str(tmp_path)
+    _graph(d, "5" * 16, [])
+    _graph(d, "4" * 16, [("C1", "real", "false")])
+    assert len(janitor.scan(loopgraph_dir=d, home=d)["empty"]) == 1
+    janitor.reap(loopgraph_dir=d, home=d, dry_run=False)
+    data = janitor.scan(loopgraph_dir=d, home=d)
+    assert data["empty"] == []
+    assert len(data["criteria"]) == 1, "reap must not remove a graph with work in it"
+
+
+def test_memory_health_finds_a_file_missing_from_the_index(tmp_path):
+    """The failure this automates: a memory file present on disk but absent
+    from MEMORY.md is invisible to every session. One hid a global word ban
+    from enforcement for ten days and was only found by hand."""
+    c = tmp_path / "memory"; c.mkdir()
+    (c / "MEMORY.md").write_text("- [listed.md](listed.md) - a hook\n")
+    (c / "listed.md").write_text("x")
+    (c / "orphan.md").write_text("x")
+    h = janitor.memory_health(corpus=str(c), db=str(tmp_path / "nope.db"))
+    assert h["unindexed"] == ["orphan.md"]
+    assert h["dead_links"] == []
+
+
+def test_memory_health_finds_an_index_entry_with_no_file(tmp_path):
+    c = tmp_path / "memory"; c.mkdir()
+    (c / "MEMORY.md").write_text("- [ghost.md](ghost.md) - hook\n")
+    h = janitor.memory_health(corpus=str(c), db=str(tmp_path / "nope.db"))
+    assert h["dead_links"] == ["ghost.md"]

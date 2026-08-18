@@ -15,7 +15,7 @@ def main() -> int:
         # Payload cwd, not os.getcwd(): the agent's shell keeps its directory
         # between tool calls, so the process cwd drifts to whatever repo was
         # last cd'd into and the brief would come from that project's graph.
-        conn = open_db(coord.default_db_path(ev.get("cwd")))
+        conn = coord.open_project_db(ev.get("cwd"))
         if not coord.is_enabled(conn):
             return 0
         parts = [coord.brief(conn)]
