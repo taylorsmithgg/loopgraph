@@ -177,3 +177,38 @@ def test_memory_health_finds_an_index_entry_with_no_file(tmp_path):
     (c / "MEMORY.md").write_text("- [ghost.md](ghost.md) - hook\n")
     h = janitor.memory_health(corpus=str(c), db=str(tmp_path / "nope.db"))
     assert h["dead_links"] == ["ghost.md"]
+
+
+def test_find_searches_criteria_across_every_graph(tmp_path):
+    """`mem recall` covers memories only. What we decided "done" means, and
+    the command that proves it, lived in 31 databases with no search at all --
+    the same unreachability that left work unfinished, one store over."""
+    d = str(tmp_path)
+    _graph(d, "3" * 16, [("C1", "SMS OpenSearch is fed by Vector", "false")])
+    _graph(d, "2" * 16, [("C9", "tenant isolation on the multipart path", "false")])
+    hits = janitor.find("opensearch", loopgraph_dir=d, home=d)
+    assert [h["id"] for h in hits] == ["C1"]
+    assert janitor.find("multipart", loopgraph_dir=d, home=d)[0]["id"] == "C9"
+
+
+def test_find_matches_the_evidence_command_too(tmp_path):
+    """The check is often where the identifier lives -- a bucket, a host, a
+    flag -- and that is what someone actually searches for."""
+    d = str(tmp_path)
+    _graph(d, "0" * 16, [("C1", "hosts are available", "check-hosts-available.sh")])
+    assert janitor.find("check-hosts", loopgraph_dir=d, home=d)[0]["id"] == "C1"
+
+
+def test_find_can_exclude_closed_criteria(tmp_path):
+    d = str(tmp_path)
+    conn = _graph(d, "a" * 15 + "z", [("C1", "already done thing", "true")])
+    conn.execute("INSERT INTO runs (criterion_id, exit_code, stdout, stderr, "
+                 "started_at, ok) VALUES ('C1', 0, '', '', '2026-01-01', 1)")
+    conn.commit()
+    assert janitor.find("done thing", loopgraph_dir=d, home=d)
+    assert janitor.find("done thing", loopgraph_dir=d, home=d,
+                        include_closed=False) == []
+
+
+def test_find_is_empty_for_an_empty_query(tmp_path):
+    assert janitor.find("  ", loopgraph_dir=str(tmp_path), home=str(tmp_path)) == []

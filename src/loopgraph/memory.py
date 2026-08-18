@@ -316,7 +316,45 @@ def retain(
                  (mid, text, " ".join(tags)))
     emit_delta(conn, mid, "MEMORY_RETAINED", None, text[:200])
     meta_set(conn, "memories", str(int(meta_get(conn, "memories", "0")) + 1))
+    autolink(conn, mid, text)
     return mid
+
+
+# A link the writer has to remember to type is a link that does not get
+# typed: 141 of 214 memories here had none, including three about the same
+# host pool retained days apart. The graph was a pile of documents wearing
+# the word graph. These are marked auto so a curated `[[link]]` stays
+# distinguishable from a guess.
+AUTOLINK_MAX = 4
+AUTOLINK_MIN_COVERAGE = 0.34
+
+
+def autolink(conn: sqlite3.Connection, mid: str, text: str,
+             max_links: int = AUTOLINK_MAX,
+             min_coverage: float = AUTOLINK_MIN_COVERAGE) -> list[str]:
+    """Connect a new memory to the ones it is about, by its own words.
+
+    Deliberately conservative and lexical: same BM25 that powers recall, with
+    a coverage floor so a shared common word is not a relationship. Wrong
+    links are worse than missing ones -- they widen every future expansion --
+    so this prefers to add nothing.
+    """
+    try:
+        hits = recall(conn, text, k=max_links + 1, scope="full")
+    except Exception:
+        return []
+    made = []
+    for h in hits:
+        if h["id"] == mid or len(made) >= max_links:
+            continue
+        if h.get("coverage", 0) < min_coverage:
+            continue
+        try:
+            relate(conn, mid, h["id"])
+            made.append(h["id"])
+        except Exception:
+            continue
+    return made
 
 
 def _ensure_meta_col(conn: sqlite3.Connection) -> None:
@@ -367,11 +405,110 @@ def _terms(query: str) -> list[str]:
             if len(t) > 2 and t.lower() not in STOPWORDS]
 
 
+
+# Vocabulary bridging, without a model in the path.
+#
+# BM25 matches words, and a question is asked in the asker's words while the
+# corpus is written in the estate's: "customer" for notes that say "tenant",
+# "remote desktop" for notes that say AVD, "amazon" for notes that say S3.
+# Measured on a held paraphrase set, that gap cost a third of realistic
+# queries -- they returned something confidently irrelevant, which is worse
+# than returning nothing. Link expansion does not rescue those: when the seed
+# hit is already wrong, so is everything one edge from it.
+#
+# An alias table is the deterministic version of what an embedding would do
+# here, and this estate's vocabulary is small and stable enough to write down.
+# Operators extend it in ~/.loopgraph/aliases.toml, same as sensitive.toml --
+# the shipped list stays generic, anything client-specific stays local.
+DEFAULT_ALIASES: dict[str, tuple[str, ...]] = {
+    "customer": ("tenant", "client"),
+    "client": ("tenant", "customer"),
+    "tenant": ("customer", "client"),
+    "amazon": ("aws", "s3"),
+    "bucket": ("s3",),
+    "archive": ("retention", "glacier", "lake"),
+    "desktop": ("avd", "vdi", "workspace"),
+    "vm": ("instance", "host", "node"),
+    "siem": ("sentinel", "opensearch", "splunk"),
+    "cost": ("spend", "billing", "price"),
+    "price": ("cost", "pricing", "spend"),
+    "expensive": ("cost", "spend", "tokens"),
+    "restart": ("reboot", "bounce", "cutover"),
+    "restarted": ("reboot", "rebooted"),
+    "crash": ("oom", "crashloop", "wedge"),
+    "disk": ("var", "volume", "filesystem", "storage"),
+    "full": ("exhausted", "100%"),
+    "limit": ("timeout", "cap", "quota"),
+    "bound": ("timeout", "cap", "limit"),
+    "slow": ("latency", "lag"),
+    "broken": ("failing", "degraded"),
+    "silent": ("dead", "no-op", "wallpaper"),
+    "context": ("tokens", "window"),
+    "turn": ("session", "prompt"),
+    "switch": ("cisco", "syslog"),
+    "logs": ("logstash", "syslog", "ingest"),
+    "search": ("opensearch", "elastic", "clickhouse"),
+}
+
+_ALIAS_CACHE: dict[tuple, dict[str, tuple[str, ...]]] = {}
+
+
+def aliases_config_path() -> str:
+    return os.environ.get("LOOPGRAPH_ALIASES_CONFIG") or os.path.join(
+        os.path.expanduser("~"), ".loopgraph", "aliases.toml")
+
+
+def load_aliases(path: str | None = None) -> dict[str, tuple[str, ...]]:
+    """Operator-supplied synonyms, merged over the shipped defaults.
+
+        # ~/.loopgraph/aliases.toml
+        [alias]
+        ncab = ["avd", "hostpool"]
+    """
+    path = path or aliases_config_path()
+    out = dict(DEFAULT_ALIASES)
+    try:
+        key = (path, os.stat(path).st_mtime_ns)
+    except OSError:
+        return out
+    if key in _ALIAS_CACHE:
+        return _ALIAS_CACHE[key]
+    try:
+        import tomllib
+        with open(path, "rb") as fh:
+            conf = tomllib.load(fh)
+        for word, syns in (conf.get("alias") or {}).items():
+            if isinstance(syns, list):
+                merged = tuple(out.get(word.lower(), ())) + tuple(
+                    str(s).lower() for s in syns)
+                out[word.lower()] = tuple(dict.fromkeys(merged))
+    except Exception:
+        pass
+    _ALIAS_CACHE[key] = out
+    return out
+
+
+def _expand(terms: list[str]) -> list[str]:
+    """Query terms plus their aliases, original order, no duplicates.
+
+    Expansion is OR-ed, so an alias can only ADD candidates -- it never
+    displaces a literal match, and coverage still scores on what the caller
+    actually typed.
+    """
+    table = load_aliases()
+    out = list(terms)
+    for t in terms:
+        for syn in table.get(t, ()):
+            if syn not in out:
+                out.append(syn)
+    return out
+
+
 def _fts_query(query: str) -> str:
     """FTS5 syntax is a minefield of operators. Users type sentences, and a
     stray `-` or `"` turns a lookup into a syntax error, so quote every term
     and OR them together."""
-    return " OR ".join(f'"{t}"' for t in _terms(query))
+    return " OR ".join(f'"{t}"' for t in _expand(_terms(query)))
 
 
 def recall(
@@ -433,6 +570,42 @@ def recall(
             "superseded_by": superseded_by(conn, r["id"]),
         })
     out.sort(key=lambda m: -m["score"])
+    # One hop along the graph. A question asked in the asker's vocabulary
+    # ("customer" for a corpus that says "tenant") can land on a neighbour of
+    # the right memory instead of the memory itself; BM25 alone then reports
+    # nothing useful and the answer sits one edge away, already stored.
+    # Discounted so a lexical hit always outranks an inferred one, and only
+    # ever from hits good enough to trust as a starting point.
+    if out:
+        have = {m["id"] for m in out}
+        seeds = [m for m in out[:3] if m.get("coverage", 0) >= 0.25]
+        for seed in seeds:
+            for nid in neighbours(conn, seed["id"]):
+                if nid in have:
+                    continue
+                row = conn.execute(
+                    "SELECT statement, created_at FROM nodes WHERE id = ? "
+                    "AND type = 'memory'", (nid,)).fetchone()
+                if row is None:
+                    continue
+                meta = mem_meta(conn, nid)
+                if kind and meta.get("kind") != kind:
+                    continue
+                if scope != "full" and meta.get("sensitive"):
+                    withheld += 1
+                    continue
+                have.add(nid)
+                out.append({
+                    "id": nid, "text": row["statement"],
+                    "kind": meta.get("kind", "world"),
+                    "tags": meta.get("tags", []), "source": meta.get("source", ""),
+                    "created_at": row["created_at"],
+                    "score": round(seed["score"] * 0.45, 3),
+                    "coverage": 0.0, "matched": [],
+                    "via": seed["id"],
+                    "superseded_by": superseded_by(conn, nid),
+                })
+    out.sort(key=lambda m: -m["score"])
     out = out[:k]
     if withheld:
         # Withholding silently would let a harness believe nothing is known.
@@ -454,6 +627,14 @@ def superseded_by(conn: sqlite3.Connection, mid: str) -> str | None:
         "SELECT src FROM edges WHERE dst = ? AND rel_type = 'supersedes' "
         "ORDER BY created_at DESC LIMIT 1", (mid,)).fetchone()
     return row["src"] if row else None
+
+
+def neighbours(conn: sqlite3.Connection, mid: str) -> list[str]:
+    """Ids one edge away, in either direction."""
+    rows = conn.execute(
+        "SELECT dst AS o FROM edges WHERE src = ? "
+        "UNION SELECT src AS o FROM edges WHERE dst = ?", (mid, mid))
+    return [r["o"] for r in rows]
 
 
 def relate(conn: sqlite3.Connection, a: str, b: str, rel: str = "relates_to") -> None:

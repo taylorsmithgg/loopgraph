@@ -493,6 +493,9 @@ def main(argv: list[str] | None = None) -> int:
     jn.add_argument("--max-lines", type=int, default=20)
     jn.add_argument("--stale-days", type=int, default=3)
     jn.add_argument("--json", action="store_true")
+    jn.add_argument("--find", metavar="QUERY",
+                    help="search criteria across every graph")
+    jn.add_argument("--open-only", action="store_true")
     jn.add_argument("--reap", action="store_true",
                     help="clear stated goals nobody turned into criteria")
     jn.add_argument("--apply", action="store_true", help="with --reap, actually write")
@@ -514,6 +517,18 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "janitor":
         from . import janitor as _jan
+        if args.find:
+            hits = _jan.find(args.find, include_closed=not args.open_only)
+            if args.json:
+                print(json.dumps(hits, indent=2))
+                return 0
+            for h in hits:
+                age = "?" if h["age"] is None else f"{h['age']}d"
+                print(f"{h['state']:9} {age:>4} {_jan._short(h['where'])} "
+                      f"{h['id']}: {h['statement'][:90]}")
+            if not hits:
+                print(f"janitor: no criterion mentions {args.find!r}")
+            return 0
         if args.reap:
             done = _jan.reap(dry_run=not args.apply)
             for line in done:

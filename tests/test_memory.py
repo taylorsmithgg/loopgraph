@@ -609,3 +609,66 @@ def test_credential_token_still_classifies(text):
 def test_measured_tokens_are_not_credentials(text):
     from loopgraph.memory import sensitivity
     assert sensitivity(text) == [], text
+
+
+def test_retain_links_a_new_memory_to_what_it_is_about(tmp_path):
+    """A link the writer must remember to type does not get typed: 141 of 214
+    memories here had none, including three about the same host pool."""
+    from loopgraph import memory
+    conn = memory.open_memory(str(tmp_path / "m.db"))
+    memory.retain(conn, "The SMS tenant logstash pipeline drops events on restart")
+    b = memory.retain(conn, "logstash pipeline restart on the SMS tenant loses "
+                            "queued events until the queue is persistent")
+    assert memory.neighbours(conn, b), "a related memory must not land isolated"
+
+
+def test_autolink_refuses_a_merely_common_word(tmp_path):
+    """A wrong link widens every future expansion, so this prefers none."""
+    from loopgraph import memory
+    conn = memory.open_memory(str(tmp_path / "m.db"))
+    memory.retain(conn, "kubernetes ingress annotations for the alb controller")
+    b = memory.retain(conn, "the espresso machine in the kitchen needs descaling")
+    assert memory.neighbours(conn, b) == []
+
+
+def test_recall_reaches_a_memory_one_edge_away(tmp_path):
+    from loopgraph import memory
+    conn = memory.open_memory(str(tmp_path / "m.db"))
+    a = memory.retain(conn, "AVD-NCAB-HP session hosts report Available")
+    # Deliberately shares no vocabulary with the query, so the ONLY route to
+    # it is the edge. Otherwise the test passes on a lexical hit and proves
+    # nothing about expansion.
+    b = memory.retain(conn, "quarterly badminton fixtures were rescheduled")
+    memory.relate(conn, a, b)
+    hits = memory.recall(conn, "AVD-NCAB-HP session hosts", k=5, scope="full")
+    assert b in [h["id"] for h in hits], "the edge is the only way to reach it"
+    assert next(h for h in hits if h["id"] == b)["via"] == a
+
+
+def test_a_lexical_hit_always_outranks_an_inferred_one(tmp_path):
+    from loopgraph import memory
+    conn = memory.open_memory(str(tmp_path / "m.db"))
+    a = memory.retain(conn, "AVD-NCAB-HP session hosts report Available")
+    b = memory.retain(conn, "unrelated wording entirely, only reachable by edge")
+    memory.relate(conn, a, b)
+    hits = memory.recall(conn, "AVD-NCAB-HP session hosts", k=5, scope="full")
+    assert hits[0]["id"] == a
+
+
+def test_query_aliases_bridge_the_asker_s_vocabulary(tmp_path):
+    """The corpus says tenant; the question says customer. Measured, that gap
+    cost a third of realistic queries."""
+    from loopgraph import memory
+    conn = memory.open_memory(str(tmp_path / "m.db"))
+    memory.retain(conn, "each tenant gets a z-prod bucket named for its id")
+    hits = memory.recall(conn, "which bucket belongs to a customer", k=5, scope="full")
+    assert hits, "an alias must bridge customer -> tenant"
+
+
+def test_aliases_only_add_candidates_never_displace_a_literal(tmp_path):
+    from loopgraph import memory
+    conn = memory.open_memory(str(tmp_path / "m.db"))
+    exact = memory.retain(conn, "tenant isolation on the multipart upload path")
+    memory.retain(conn, "customer records live in the CRM")
+    hits = memory.recall(conn, "tenant isolation multipart", k=5, scope="full")
+    assert hits[0]["id"] == exact

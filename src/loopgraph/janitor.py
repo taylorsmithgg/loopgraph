@@ -201,6 +201,70 @@ def memory_health(corpus: str | None = None, db: str | None = None) -> dict:
     return out
 
 
+def find(query: str, loopgraph_dir: str | None = None, home: str | None = None,
+         limit: int = 10, include_closed: bool = True) -> list[dict]:
+    """Search criteria across every graph on this machine.
+
+    `mem recall` covers memories only. Criteria -- what we decided "done"
+    means, and the command that proves it -- lived in 31 separate databases
+    with no search over them at all, so "did we ever check X?" was
+    unanswerable without knowing which repo to stand in. That is the same
+    unreachability that left work unfinished, one store over.
+
+    Deliberately substring, not BM25: these are short statements and shell
+    commands where an exact identifier (a bucket name, a host, a flag) is
+    what you actually search for, and stemming would blur it.
+    """
+    d = loopgraph_dir or os.path.join(os.path.expanduser("~"), ".loopgraph")
+    index = _root_index(home)
+    q = (query or "").strip().lower()
+    if not q:
+        return []
+    out = []
+    for path in sorted(glob.glob(os.path.join(d, "*.db"))):
+        if os.path.basename(path) == "memory.db":
+            continue
+        try:
+            conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+            conn.row_factory = sqlite3.Row
+            key = os.path.basename(path)[:-3]
+            root = None
+            try:
+                r = conn.execute(
+                    "select value from meta where key = 'root'").fetchone()
+                root = r["value"] if r else None
+            except sqlite3.Error:
+                pass
+            where = root or index.get(key) or key[:8]
+            rows = conn.execute(
+                "select id, statement, evidence_cmd, created_at from nodes "
+                "where type = 'criterion'").fetchall()
+        except sqlite3.Error:
+            continue
+        for r in rows:
+            hay = f"{r['id']} {r['statement'] or ''} {r['evidence_cmd'] or ''}".lower()
+            if q not in hay:
+                continue
+            try:
+                run = conn.execute(
+                    "select exit_code from runs where criterion_id = ? "
+                    "order by id desc limit 1", (r["id"],)).fetchone()
+            except sqlite3.Error:
+                run = None
+            state = ("never-run" if run is None
+                     else "closed" if run["exit_code"] == 0 else "open")
+            if state == "closed" and not include_closed:
+                continue
+            out.append({"where": where, "id": r["id"], "state": state,
+                        "statement": (r["statement"] or "").strip(),
+                        "cmd": (r["evidence_cmd"] or "").strip(),
+                        "age": _age_days(r["created_at"])})
+        conn.close()
+    out.sort(key=lambda x: (x["state"] == "closed",
+                            -(x["age"] if x["age"] is not None else -1)))
+    return out[:limit]
+
+
 def _short(where: str, home: str | None = None) -> str:
     home = home or os.path.expanduser("~")
     if where.startswith(home):
