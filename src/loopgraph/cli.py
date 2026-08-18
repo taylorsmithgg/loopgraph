@@ -544,7 +544,14 @@ def main(argv: list[str] | None = None) -> int:
         "budget_tokens": args.budget_tokens,
     }
     if args.db is None:
-        args.db = coord.default_db_path()
+        # Prefer the graph THIS session's Stop hook is using. The hooks resolve
+        # the project from the transcript, which does not move; the CLI has no
+        # transcript and resolved from cwd, so the moment the hooks stopped
+        # drifting the two disagreed -- `add` from a shell parked in another
+        # repo wrote a criterion the gate would never see, and reported
+        # success. Same CLI/hook split as this morning, roles reversed,
+        # because only half the system had been fixed.
+        args.db = coord.session_graph_path() or coord.default_db_path()
     conn = open_db(args.db)
 
     if args.cmd == "security":

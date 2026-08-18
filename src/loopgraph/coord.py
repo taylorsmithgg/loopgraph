@@ -115,6 +115,42 @@ def project_root(cwd: str | None = None,
     return root
 
 
+def session_graph_path() -> str | None:
+    """The graph THIS session's Stop hook is actually using.
+
+    The hooks resolve the project from the transcript, which does not move.
+    The CLI has no transcript to read, so it resolved from cwd -- and the
+    moment the hooks stopped drifting, the two disagreed: `loopgraph add` from
+    a shell parked in another repo wrote a criterion the gate would never see.
+    That is the CLI/hook split diagnosed this morning, reappearing with the
+    roles reversed because only half the system was fixed.
+
+    The gate stamps `gate_seen:<session>` in whichever graph it uses, so the
+    CLI can simply ask which graph has seen it. Falls back to None before this
+    session has ever stopped, in which case cwd is all there is.
+    """
+    import glob
+    import os
+    import sqlite3
+    key = session_key()
+    if not key:
+        return None
+    for path in glob.glob(os.path.join(os.path.expanduser("~"), ".loopgraph", "*.db")):
+        if os.path.basename(path) == "memory.db":
+            continue
+        try:
+            conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+            row = conn.execute(
+                "SELECT value FROM meta WHERE key = ?",
+                ("gate_seen:" + key,)).fetchone()
+            conn.close()
+            if row:
+                return path
+        except sqlite3.Error:
+            continue
+    return None
+
+
 def open_project_db(cwd: str | None = None,
                     transcript_path: str | None = None):
     """Open this project's graph AND record which directory it belongs to.

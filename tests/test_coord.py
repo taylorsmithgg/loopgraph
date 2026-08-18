@@ -407,3 +407,34 @@ def test_an_unrecognisable_slug_falls_back_rather_than_guessing(tmp_path):
     from loopgraph import coord
     tp = str(tmp_path / "p" / "-no-such-path-anywhere-at-all" / "s.jsonl")
     assert coord.project_from_transcript(tp) is None
+
+
+def test_cli_finds_the_graph_its_own_gate_is_using(tmp_path, monkeypatch):
+    """Fixing only the hooks created the same CLI/hook split in reverse: the
+    hooks stopped drifting, the CLI did not, and `add` from a shell parked in
+    another repo wrote a criterion the gate would never see -- reporting
+    success while doing nothing."""
+    from loopgraph import coord
+    from loopgraph.db import open_db, meta_set
+    monkeypatch.setenv("LOOPGRAPH_SESSION", "sess-under-test")
+    monkeypatch.setattr(os.path, "expanduser",
+                        lambda p: p.replace("~", str(tmp_path), 1))
+    (tmp_path / ".loopgraph").mkdir(parents=True, exist_ok=True)
+    mine = str(tmp_path / ".loopgraph" / ("a" * 16 + ".db"))
+    other = str(tmp_path / ".loopgraph" / ("b" * 16 + ".db"))
+    open_db(other).commit()
+    conn = open_db(mine)
+    meta_set(conn, "gate_seen:sess-under-test", "1")
+    conn.commit()
+    assert coord.session_graph_path() == mine
+
+
+def test_no_gate_has_run_yet_falls_back_to_cwd(tmp_path, monkeypatch):
+    """Before this session has ever stopped there is nothing to match on, and
+    cwd is all there is -- which must not become a crash."""
+    from loopgraph import coord
+    monkeypatch.setenv("LOOPGRAPH_SESSION", "never-stopped")
+    monkeypatch.setattr(os.path, "expanduser",
+                        lambda p: p.replace("~", str(tmp_path), 1))
+    (tmp_path / ".loopgraph").mkdir(parents=True, exist_ok=True)
+    assert coord.session_graph_path() is None
