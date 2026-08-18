@@ -261,3 +261,38 @@ def test_status_is_silent_when_no_gate_has_ever_run(gate):
     conn = open_db(gate.db)
     meta_set(conn, "last_gate_session", "some-sibling-session")
     assert "MISMATCH" not in _gate_line(conn, gate.db)
+
+
+def test_a_refused_criterion_stops_the_gate_driving_at_it(gate):
+    """`refuse` wrote an artifact that rules.py and state.py never read, so a
+    refused criterion kept blocking exactly as before -- 38 refusals across
+    this machine's history, zero effect. Without this the loop spends its
+    whole block budget driving at work no effort here can finish: revoking
+    someone's sessions in a tenant this session must not touch."""
+    _criterion(gate.db, "HUMAN")
+    conn = open_db(gate.db)
+    coord.refuse(conn, "HUMAN", "blocked on a production action that is not mine")
+    conn.commit()
+    _, out = gate(stop_hook_active=False)
+    assert out.get("decision") != "block"
+
+
+def test_a_refused_criterion_is_still_named(gate):
+    """It must not vanish. That is how an open compromise becomes invisible
+    again, which is the failure refusing it was meant to avoid."""
+    _criterion(gate.db, "HUMAN")
+    conn = open_db(gate.db)
+    coord.refuse(conn, "HUMAN", "needs Taylor to revoke sessions")
+    conn.commit()
+    _, out = gate(stop_hook_active=False)
+    msg = out.get("systemMessage", "")
+    assert "HUMAN" in msg and "REFUSED" in msg
+    assert "revoke sessions" in msg
+
+
+def test_an_unrefused_criterion_still_blocks(gate):
+    """The escape hatch must not become a way past the gate in general."""
+    _criterion(gate.db, "REAL")
+    _, out = gate(stop_hook_active=False)
+    assert out.get("decision") == "block"
+    assert "REAL" in out["reason"]

@@ -463,6 +463,22 @@ def artifact_add(conn, artifact_id: str, key: str = "", kind: str = "") -> str:
     return k
 
 
+def refusal(conn, key: str) -> dict | None:
+    """The recorded decision that `key` cannot be met from here, if any.
+
+    `refuse` wrote an artifact and nothing ever read it -- rules.py and
+    state.py do not mention refusals, so a refused criterion kept blocking
+    exactly as before. Thirty-eight refusals across this machine's history,
+    zero effect on any gate. This is the half that was missing.
+    """
+    from .graph import get_node
+    node = f"refusal:{key}"
+    if get_node(conn, node) is None:
+        return None
+    m = node_flags(conn, node)
+    return m if m.get("refusal") else None
+
+
 def refuse(conn, key: str, reason: str, by: str = "") -> None:
     """Record that a class of artifact was deliberately NOT built.
 
