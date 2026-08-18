@@ -287,6 +287,7 @@ def retain(
     tags: tuple[str, ...] | list[str] = (),
     source: str = "",
     id: str | None = None,
+    created_at: str | None = None,
 ) -> str:
     """Store one memory. Returns its id.
 
@@ -301,7 +302,11 @@ def retain(
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {', '.join(KINDS)}")
     mid = id or _next_id(conn, text)
-    now = utcnow()
+    # An imported memory keeps the date it was learned. Without this a
+    # reindex stamps every memory with the rebuild time -- observed: all 214
+    # dated the same day -- which silently turns the recency prior, the
+    # second-largest term in the ranking, into an identical constant.
+    now = created_at or utcnow()
     tags = tuple(t.strip() for t in tags if t.strip())
     sensitive = sensitivity(text)
     conn.execute(
@@ -569,6 +574,14 @@ def recall(
             "matched": hit_terms,
             "superseded_by": superseded_by(conn, r["id"]),
         })
+    # Coverage was computed, reported, and then ignored by the ordering. It
+    # is the only term that knows how much of the QUESTION was answered, and
+    # without it BM25 hands rank 1 to whatever is longest and most common:
+    # measured, a hit covering 29% of the query outranked one covering 57%.
+    # Alias expansion made that worse, because an expanded term earns BM25
+    # credit that the asker never actually typed.
+    for m in out:
+        m["score"] = round(m["score"] * (0.4 + m.get("coverage", 0.0)), 3)
     out.sort(key=lambda m: -m["score"])
     # One hop along the graph. A question asked in the asker's vocabulary
     # ("customer" for a corpus that says "tenant") can land on a neighbour of
@@ -780,7 +793,7 @@ def reflect(conn: sqlite3.Connection, min_cluster: int = 3) -> list[dict]:
 
 def write_markdown(
     directory: str, mid: str, text: str, kind: str,
-    tags=(), source: str = "", title: str = "",
+    tags=(), source: str = "", title: str = "", created: str = "",
 ) -> str:
     """Write the memory as a file and put it in MEMORY.md.
 
@@ -793,7 +806,8 @@ def write_markdown(
     body = text.strip()
     hook = body.splitlines()[0][:180]
     front = ["---", f"name: {mid}", f"description: {hook}", "metadata:",
-             f"  type: {KIND_TO_TYPE.get(kind, 'reference')}"]
+             f"  type: {KIND_TO_TYPE.get(kind, 'reference')}",
+             f"  created: {created or utcnow()}"]
     if tags:
         front.append(f"  tags: {', '.join(tags)}")
     if source:
@@ -853,6 +867,15 @@ def reindex(conn: sqlite3.Connection, directory: str) -> dict:
         conn.execute("DELETE FROM nodes WHERE id = ?", (r["id"],))
     meta_set(conn, "memories", "0")
     got = import_markdown(conn, directory)
+
+    # Second autolink pass, now that every memory exists. During the import
+    # each one can only see the memories inserted before it, so the earliest
+    # arrivals link to almost nothing -- isolation came out at 24% rebuilt
+    # against 10% for the same corpus linked in one pass. Links are derived
+    # data: rebuilding them is exactly what makes the index disposable.
+    for r in list(conn.execute(
+            "SELECT id, statement FROM nodes WHERE type='memory'")):
+        autolink(conn, r["id"], r["statement"])
 
     # Repair MEMORY.md too. A file that exists but is not indexed is invisible
     # to the session that loads the index -- the same divergence in miniature,
@@ -935,8 +958,18 @@ def import_markdown(conn: sqlite3.Connection, directory: str) -> dict:
             # parse above misses it; fall back to the filename convention.
             typ = name.split("_", 1)[0] if "_" in name else ""
         text = (meta.get("description", "").strip() + "\n\n" + body.strip()).strip()
+        # Date order: what the file records, else the file's own mtime.
+        # Falling through to "now" is what flattened the corpus.
+        created = (meta.get("created") or meta.get("modified") or "").strip()
+        if not created:
+            try:
+                created = datetime.fromtimestamp(
+                    os.path.getmtime(path), timezone.utc).isoformat()
+            except OSError:
+                created = ""
         retain(conn, text, kind=KIND_BY_TYPE.get(typ, "world"),
-               tags=(typ,) if typ else (), source=path, id=mid)
+               tags=(typ,) if typ else (), source=path, id=mid,
+               created_at=created or None)
         if title:
             m = mem_meta(conn, mid)
             m["title"] = title
