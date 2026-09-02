@@ -156,6 +156,41 @@ graph. Treat it as "stop" and you bail out of ordinary in-progress work. Only
 
 <p>Its values are <code>null</code> (keep working), <code>"success"</code>, <code>"stalled"</code>, <code>"exhausted"</code>,
 <code>"blocked"</code> and <code>"no-op"</code>.</p>
+<h2 id="reading-the-report">Reading the report<a class="headerlink" href="#reading-the-report" title="Permanent link">#</a></h2>
+<p><code>status</code> and <code>check</code> print the same thing. The four words a criterion can
+carry are the whole vocabulary:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Word</th>
+<th>Means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>met</td>
+<td>the check ran and passed</td>
+</tr>
+<tr>
+<td>not met yet</td>
+<td>the check ran and did not pass</td>
+</tr>
+<tr>
+<td>never checked</td>
+<td>the check has not been run at all</td>
+</tr>
+<tr>
+<td>met, but the check is old enough to need re-running</td>
+<td>it passed, then its staleness window expired</td>
+</tr>
+</tbody>
+</table></div>
+<p>"never checked" is the one people misread. It does not judge the work. It
+says nobody has run the command yet.</p>
+<p>Below the criteria come any rules that fired, each as a sentence with its rule
+id in brackets so it can be looked up in <a href="design.html">design</a>. Then the last
+four lines, which are the same every time: whether the work is finished, which
+gates are on, this session's key, and the database in use.</p>
 <h2 id="command-surface">Command surface<a class="headerlink" href="#command-surface" title="Permanent link">#</a></h2>
 <div class="codehilite"><pre><span></span><code>loopgraph on|off [--only scope|loop]     # both gates by default
 loopgraph status                         # criteria + gate state

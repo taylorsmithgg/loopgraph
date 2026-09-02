@@ -12,7 +12,7 @@ Above is the output of `loopgraph $ARGUMENTS` for the current repo (no
 arguments means `status`).
 
 Relay it concisely. How to read it:
-- `gates: scope=ON loop=ON` — scope gates agent dispatch, loop gates turn end. Both off by default.
+- `Gates: scope on (agent dispatch), loop on (turn end)` — scope holds up agent dispatch, loop holds up the end of a turn. Both off by default.
 - `claim` exiting 3: dispatch refused, another agent holds part of that write-set, nothing was claimed.
 - `validate` exiting 1: the agent's premises moved while it ran; quarantine its conclusions rather than merging.
 - `artifact check` exiting 1: that name would duplicate an existing artifact or repeat a recorded refusal.

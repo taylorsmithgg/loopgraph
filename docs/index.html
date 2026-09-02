@@ -78,18 +78,18 @@ cannot end while one of them is red.</p>
 <div class="ledger">
   <div class="bar"><span class="dot"></span>loopgraph check</div>
   <div class="row"><span class="id">C1</span>
-    <span class="verdict pass">closed</span>
+    <span class="verdict pass">met</span>
     <span class="stmt">the queue drains under restart</span></div>
   <div class="row"><span class="id">C2</span>
-    <span class="verdict fail">failing</span>
+    <span class="verdict fail">not met yet</span>
     <span class="stmt">no duplicate rows after replay</span></div>
   <div class="row"><span class="id">G-pytest</span>
-    <span class="verdict pass">closed</span>
+    <span class="verdict pass">met</span>
     <span class="stmt">the repo's own suite still passes <em>[guard]</em></span></div>
   <div class="row"><span class="id">C3</span>
-    <span class="verdict wait">unproven</span>
+    <span class="verdict wait">never checked</span>
     <span class="stmt">restart is idempotent under load</span></div>
-  <div class="exit">terminal_state <b>null</b> &mdash; keep working &middot; exit <b>1</b></div>
+  <div class="exit">Not finished. There is still work to do. &middot; exit <b>1</b></div>
 </div>
 </div>
 
@@ -167,19 +167,31 @@ cp<span class="w"> </span>dist/slash-command.md<span class="w"> </span>~/.claude
 root&gt;.db</code>. Both gates are inert until you give them something, so installing
 loopgraph changes no behaviour until a <code>SCOPE:</code> line or a criterion appears.</p>
 <h2 id="a-first-specification">A first specification<a class="headerlink" href="#a-first-specification" title="Permanent link">#</a></h2>
-<div class="codehilite"><pre><span></span><code><span class="gp">$ </span>loopgraph<span class="w"> </span>add<span class="w"> </span>C1<span class="w"> </span><span class="s2">&quot;the queue drains under restart&quot;</span><span class="w"> </span><span class="se">\</span>
+<div class="codehilite"><pre><span></span><code><span class="gp">$ </span>loopgraph<span class="w"> </span>add<span class="w"> </span>C1<span class="w"> </span>--statement<span class="w"> </span><span class="s2">&quot;the queue drains under restart&quot;</span><span class="w"> </span><span class="se">\</span>
 <span class="w">    </span>--cmd<span class="w"> </span><span class="s1">&#39;for i in $(seq 50); do ./restart; done; [ $(in) -eq $(out) ]&#39;</span>
-<span class="go">C1 added   (unproven)</span>
 
 <span class="gp">$ </span>loopgraph<span class="w"> </span>check<span class="p">;</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;exit=</span><span class="nv">$?</span><span class="s2">&quot;</span>
-<span class="go">C1  unproven  the queue drains under restart</span>
+<span class="go">1 never checked.</span>
+<span class="go">C1 never checked</span>
+<span class="go">These checks have never been run: C1 (R-05)</span>
+<span class="go">Not finished. There is still work to do.</span>
+<span class="go">Gates: scope on (agent dispatch), loop on (turn end)</span>
+<span class="go">Session: (none)</span>
+<span class="go">Database: /Users/you/.loopgraph/2f1c….db</span>
 <span class="go">exit=1</span>
 
-<span class="gp">$ </span>loopgraph<span class="w"> </span>run
-<span class="go">C1  closed</span>
+<span class="gp">$ </span>loopgraph<span class="w"> </span>run<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>loopgraph<span class="w"> </span>check<span class="p">;</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;exit=</span><span class="nv">$?</span><span class="s2">&quot;</span>
+<span class="go">1 met.</span>
+<span class="go">Finished. Everything specified has been met.</span>
+<span class="go">Gates: scope on (agent dispatch), loop on (turn end)</span>
+<span class="go">Session: (none)</span>
+<span class="go">Database: /Users/you/.loopgraph/2f1c….db</span>
 <span class="go">exit=0</span>
 </code></pre></div>
 
+<p><code>add</code> and <code>run</code> say nothing when they succeed. <code>check</code> is the command that
+reports, and its last four lines are the same every time: whether the work is
+finished, which gates are on, and where the state lives.</p>
 <p><code>add</code> refuses a check that already passes, because one that is green before the
 work cannot tell done from not-done. Among checks that do discriminate, the
 widest one wins — see <a href="gates.html#weakness-not-brevity">weakness, not brevity</a>.</p>

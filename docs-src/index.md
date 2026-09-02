@@ -14,18 +14,18 @@ cannot end while one of them is red.</p>
 <div class="ledger">
   <div class="bar"><span class="dot"></span>loopgraph check</div>
   <div class="row"><span class="id">C1</span>
-    <span class="verdict pass">closed</span>
+    <span class="verdict pass">met</span>
     <span class="stmt">the queue drains under restart</span></div>
   <div class="row"><span class="id">C2</span>
-    <span class="verdict fail">failing</span>
+    <span class="verdict fail">not met yet</span>
     <span class="stmt">no duplicate rows after replay</span></div>
   <div class="row"><span class="id">G-pytest</span>
-    <span class="verdict pass">closed</span>
+    <span class="verdict pass">met</span>
     <span class="stmt">the repo's own suite still passes <em>[guard]</em></span></div>
   <div class="row"><span class="id">C3</span>
-    <span class="verdict wait">unproven</span>
+    <span class="verdict wait">never checked</span>
     <span class="stmt">restart is idempotent under load</span></div>
-  <div class="exit">terminal_state <b>null</b> &mdash; keep working &middot; exit <b>1</b></div>
+  <div class="exit">Not finished. There is still work to do. &middot; exit <b>1</b></div>
 </div>
 </div>
 
@@ -112,18 +112,31 @@ loopgraph changes no behaviour until a `SCOPE:` line or a criterion appears.
 ## A first specification
 
 ```console
-$ loopgraph add C1 "the queue drains under restart" \
+$ loopgraph add C1 --statement "the queue drains under restart" \
     --cmd 'for i in $(seq 50); do ./restart; done; [ $(in) -eq $(out) ]'
-C1 added   (unproven)
 
 $ loopgraph check; echo "exit=$?"
-C1  unproven  the queue drains under restart
+1 never checked.
+C1 never checked
+These checks have never been run: C1 (R-05)
+Not finished. There is still work to do.
+Gates: scope on (agent dispatch), loop on (turn end)
+Session: (none)
+Database: /Users/you/.loopgraph/2f1c….db
 exit=1
 
-$ loopgraph run
-C1  closed
+$ loopgraph run && loopgraph check; echo "exit=$?"
+1 met.
+Finished. Everything specified has been met.
+Gates: scope on (agent dispatch), loop on (turn end)
+Session: (none)
+Database: /Users/you/.loopgraph/2f1c….db
 exit=0
 ```
+
+`add` and `run` say nothing when they succeed. `check` is the command that
+reports, and its last four lines are the same every time: whether the work is
+finished, which gates are on, and where the state lives.
 
 `add` refuses a check that already passes, because one that is green before the
 work cannot tell done from not-done. Among checks that do discriminate, the

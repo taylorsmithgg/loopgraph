@@ -40,8 +40,8 @@ def _report(conn, cfg) -> dict:
 
 def _gate_line(conn, db) -> str:
     import os
-    sc = "ON " if coord.is_enabled(conn) else "off"
-    lp = "ON " if coord.loop_enabled(conn) else "off"
+    sc = "on" if coord.is_enabled(conn) else "off"
+    lp = "on" if coord.loop_enabled(conn) else "off"
     forced = [n for n, v in (("LOOPGRAPH_COORD", "scope"), ("LOOPGRAPH_LOOP", "loop"))
               if os.environ.get(n, "") == "0"]
     note = f"  (forced off by {', '.join(forced)})" if forced else ""
@@ -68,17 +68,49 @@ def _gate_line(conn, db) -> str:
     else:
         # Unverified, not broken: another session's gate ran here and ours
         # has not stopped yet, so we cannot yet know whether the keys agree.
-        mismatch = (f"  (a sibling session's gate ran here last: {gate_saw}; "
-                    "this session has not stopped yet, so key agreement is "
-                    "unverified - re-check after one stop)")
-    return (f"gates: scope={sc} loop={lp}{note}\n"
-            f"session: {mine}{mismatch}\ndb: {db}")
+        mismatch = ("\n  Another session used this database most recently "
+                    f"({gate_saw}). This session has not stopped yet, so "
+                    "whether the two agree is unverified. Check again after "
+                    "one stop.")
+    # The gate names stay as they are, because they are also the values of
+    # `--only`, but each now says what it holds up: a reader who has met
+    # neither word learns nothing from "scope=ON loop=off".
+    return (f"Gates: scope {sc} (agent dispatch), loop {lp} (turn end)"
+            f"{note}\nSession: {mine}{mismatch}\nDatabase: {db}")
+
+
+# What a criterion's derived status means, said once, in words. `unproven` in
+# particular reads as a judgement on the work when it only means the check
+# has never been run.
+STATUS_WORDS = {
+    "closed": "met",
+    "open": "not met yet",
+    "stale": "met, but the check is old enough to need re-running",
+    "unproven": "never checked",
+}
+
+# `terminal_state=None` was the last line of the most-used command. Every
+# value here is a decision the reader has to make: keep going, or stop and
+# do something else.
+STATE_WORDS = {
+    None: "Not finished. There is still work to do.",
+    "success": "Finished. Everything specified has been met.",
+    "stalled": "Stopped: stalled. This will not resolve itself, so it needs "
+               "a person or a different approach.",
+    "exhausted": "Stopped: the budget for this work has run out.",
+    "blocked": "Stopped: blocked on something outside this graph.",
+    "no-op": "Nothing to do: no checkable end state was ever declared here.",
+}
 
 
 def _print_human(conn, report) -> None:
     st = report["statuses"]
     counts = {s: sum(1 for v in st.values() if v == s) for s in set(st.values())}
-    print(" ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "empty")
+    if not counts:
+        print("Nothing is being tracked here yet.")
+    else:
+        print(", ".join(f"{v} {STATUS_WORDS.get(k, k)}"
+                        for k, v in sorted(counts.items())) + ".")
     for cid, status in sorted(st.items()):
         if status == "closed":
             continue
@@ -89,36 +121,50 @@ def _print_human(conn, report) -> None:
         detail = ""
         if run is not None:
             tail = (run["stdout"] or "").strip().splitlines()[-3:]
-            detail = f" exit={run['exit_code']} {' | '.join(tail)}"
+            detail = f", last run exited {run['exit_code']}"
+            if tail:
+                detail += ": " + " | ".join(tail)
         flags = coord.node_flags(conn, cid)
         mark = "".join(
             f" [{k}]" for k in ("auto", "guard") if flags.get(k)
         ) + (f" [{flags['origin']}]" if flags.get("origin") else "")
-        print(f"{cid}{mark} {status}:{detail}")
+        print(f"{cid}{mark} {STATUS_WORDS.get(status, status)}{detail}")
     for cid, deps in sorted(report["blocked"].items()):
-        print(f"{cid} blocked by {', '.join(deps)}")
+        print(f"{cid} is waiting for {', '.join(deps)}")
     for rule in report["rules"]:
-        print(f"{rule['rule']} {rule['detail']}")
+        # The id trails the sentence rather than leading it. "R-06 orphan
+        # criteria: C2" opened with the one token that means nothing to a
+        # reader and buried the part they can act on.
+        text = rule["detail"]
+        print(f"{text[:1].upper()}{text[1:]} ({rule['rule']})")
     aud = coord.audit_state(conn)
     if aud["gameable"]:
-        print(f"GAMEABLE checks: {', '.join(aud['gameable'])}")
+        print("These checks could pass without the work being done: "
+              + ", ".join(aud["gameable"]))
     if aud.get("sabotage_only"):
-        print(f"gameable only by sabotaging the environment (PATH shim, "
-              f"conftest, ...): {', '.join(aud['sabotage_only'])} - this "
-              "defeats any check, so it is not a reason to rewrite one")
+        print("These checks could only be fooled by breaking the environment "
+              "itself, such as a PATH shim or a conftest: "
+              + ", ".join(aud["sabotage_only"])
+              + ". That defeats any check, so it is not a reason to rewrite "
+              "these.")
     if aud["unaudited"]:
-        print(f"unaudited checks: {len(aud['unaudited'])} "
-              f"({', '.join(aud['unaudited'][:5])}) - run `loopgraph game`")
+        n = len(aud["unaudited"])
+        print(f"{n} {'check has' if n == 1 else 'checks have'} never been "
+              f"audited ({', '.join(aud['unaudited'][:5])}). Run "
+              "`loopgraph game` to look at them.")
     # Not enforced here must never mean not mentioned: an open criterion that
     # quietly stopped counting is the same bug in a new coat.
     for u in coord.unenforced_criteria(conn):
-        print(f"{u['id']} open but NOT enforced in this session ({u['why']}): "
-              f"{u['statement']} - `loopgraph adopt {u['id']}` to take it on, "
-              f"`loopgraph drop {u['id']}` to remove it")
+        print(f"{u['id']} is open but nothing in this session enforces it "
+              f"({u['why']}): {u['statement']}\n"
+              f"  Run `loopgraph adopt {u['id']}` to take it on, or "
+              f"`loopgraph drop {u['id']}` to remove it.")
     pending = coord.goal_pending(conn)
     if pending:
-        print(f"goal stated, nothing declared yet: {pending}")
-    print(f"terminal_state={report['terminal_state']}")
+        print(f"A goal is set but nothing has been declared against it yet: "
+              f"{pending}")
+    print(STATE_WORDS.get(report["terminal_state"],
+                          f"Stopped: {report['terminal_state']}."))
     print(_gate_line(conn, report.get('_db', '')))
 
 
@@ -343,16 +389,18 @@ def _mem(args) -> int:
 
     if args.mem_cmd == "import":
         got = memory.import_markdown(conn, args.directory)
-        print(f"imported={got['imported']} skipped={got['skipped']} "
-              f"linked={got['linked']}")
+        print(f"Imported {got['imported']} memories from {args.directory}, "
+              f"skipped {got['skipped']}, and made {got['linked']} links "
+              "between them.")
         for p in got["pending_links"]:
-            print(f"  pending link (target not written yet): {p}")
+            print(f"  {p} is linked to, but no memory of that name exists yet.")
         return 0
 
     s = memory.stats(conn)
-    print(f"memories={s['memories']} edges={s['edges']} "
-          + " ".join(f"{k}={v}" for k, v in sorted(s["by_kind"].items())))
-    print(f"db: {memory.default_memory_db()}")
+    kinds = ", ".join(f"{v} {k}" for k, v in sorted(s["by_kind"].items()))
+    print(f"{s['memories']} memories" + (f" ({kinds})" if kinds else "")
+          + f", with {s['edges']} links between them.")
+    print(f"Stored in {memory.default_memory_db()}")
     return 0
 
 
@@ -657,15 +705,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.run:
             got = _dist.run(min_sessions=args.min_sessions,
                             since_days=args.since_days)
-            print(f"distilled: scanned {got['scanned']} transcripts, "
-                  f"{len(got['recurring'])} recurring, "
-                  f"{len(got['unconcluded'])} unconcluded clusters, "
-                  f"{len(got['corrections'])} corrections")
+            print(f"Read {got['scanned']} past sessions: "
+                  f"{len(got['recurring'])} problems that keep recurring, "
+                  f"{len(got['unconcluded'])} groups with no conclusion drawn, "
+                  f"{len(got['corrections'])} corrections.")
             return 0
         if args.json:
             print(json.dumps(_dist.load(), indent=2))
             return 0
-        print(_dist.digest() or "distill: nothing new")
+        print(_dist.digest() or "Nothing new since the last time you looked.")
         return 0
 
     if args.cmd == "janitor":
@@ -680,14 +728,14 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{h['state']:9} {age:>4} {_jan._short(h['where'])} "
                       f"{h['id']}: {h['statement'][:90]}")
             if not hits:
-                print(f"janitor: no criterion mentions {args.find!r}")
+                print(f"No criterion mentions {args.find!r}.")
             return 0
         if args.reap:
             done = _jan.reap(dry_run=not args.apply)
             for line in done:
-                print(("cleared " if args.apply else "would clear ") + line)
+                print(("Cleared " if args.apply else "Would clear ") + line)
             if not done:
-                print("janitor: no stale goals to clear")
+                print("No stale goals to clear.")
             return 0
         data = _jan.scan()
         if args.json:
@@ -695,7 +743,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         out = _jan.digest(max_lines=args.max_lines, stale_days=args.stale_days,
                           data=data)
-        print(out or "janitor: nothing loose")
+        print(out or "Nothing loose. Every criterion here is accounted for.")
         return 0
 
     if args.cmd == "init":

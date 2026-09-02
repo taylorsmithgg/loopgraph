@@ -63,6 +63,27 @@ stalled
 Its values are `null` (keep working), `"success"`, `"stalled"`, `"exhausted"`,
 `"blocked"` and `"no-op"`.
 
+## Reading the report
+
+`status` and `check` print the same thing. The four words a criterion can
+carry are the whole vocabulary:
+
+| Word | Means |
+|---|---|
+| met | the check ran and passed |
+| not met yet | the check ran and did not pass |
+| never checked | the check has not been run at all |
+| met, but the check is old enough to need re-running | it passed, then its staleness window expired |
+
+"never checked" is the one people misread. It does not judge the work. It
+says nobody has run the command yet.
+
+Below the criteria come any rules that fired, each as a sentence with its rule
+id in brackets so it can be looked up in [design](design.html). Then the last
+four lines, which are the same every time: whether the work is finished, which
+gates are on, this session's key, and the database in use.
+
+
 ## Command surface
 
 ```

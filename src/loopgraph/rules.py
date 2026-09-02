@@ -61,24 +61,24 @@ def evaluate_rules(
     # forever once nothing remains open, permanently masking `success`.
     still_open = any(v != "closed" for v in st.values())
     if st and still_open and _turns_since_progress(conn) >= stagnation:
-        out.append(
-            {"rule": "R-01", "detail": f"no criterion closed in {stagnation} turns"}
-        )
+        out.append({"rule": "R-01", "detail":
+                    f"no check has passed in the last {stagnation} turns"})
 
     stale = sorted(k for k, v in st.items() if v == "stale")
     if stale:
-        out.append({"rule": "R-02", "detail": f"stale: {', '.join(stale)}"})
+        out.append({"rule": "R-02", "detail": "these checks are old enough to "
+                    f"need re-running: {', '.join(stale)}"})
 
     ceiling = cfg.get("budget_tokens")
     spend = int(meta_get(conn, "spend", "0"))
     if ceiling is not None and spend > int(ceiling):
-        out.append({"rule": "R-04", "detail": f"spend {spend} over ceiling {ceiling}"})
+        out.append({"rule": "R-04", "detail":
+                    f"spent {spend} against a ceiling of {ceiling}"})
 
     unproven = sorted(k for k, v in st.items() if v == "unproven")
     if unproven:
-        out.append(
-            {"rule": "R-05", "detail": f"evidence never completed: {', '.join(unproven)}"}
-        )
+        out.append({"rule": "R-05", "detail": "these checks have never been "
+                    f"run: {', '.join(unproven)}"})
 
     # A guard is meant to stand alone -- it fences the repo, it is not a step
     # toward the goal -- so it is not an orphan, it is a fence.
@@ -94,15 +94,13 @@ def evaluate_rules(
         and not dependents(conn, c["id"])
     )
     if orphans:
-        out.append(
-            {"rule": "R-06", "detail": f"orphan criteria: {', '.join(orphans)}"}
-        )
+        out.append({"rule": "R-06", "detail": "these criteria are not "
+                    f"connected to the goal: {', '.join(orphans)}"})
 
     cycle = has_cycle(conn)
     if cycle is not None:
-        out.append(
-            {"rule": "R-07", "detail": f"dependency cycle: {' -> '.join(cycle)}"}
-        )
+        out.append({"rule": "R-07", "detail": "these criteria depend on each "
+                    f"other in a loop: {' -> '.join(cycle)}"})
 
     return out
 

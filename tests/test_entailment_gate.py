@@ -37,7 +37,7 @@ def test_red_check_is_accepted_and_its_first_evidence_is_recorded(db, capsys):
     assert run(db, "add", "C1", "--statement", "s", "--cmd", "false") == 0
     run(db, "status")
     # Not "unproven": the gate already ran it, so the graph starts honest.
-    assert "C1 open" in capsys.readouterr().out
+    assert "C1 not met yet" in capsys.readouterr().out
 
 
 def test_allow_green_is_the_stated_exception(db):
@@ -125,7 +125,8 @@ def test_status_still_shows_what_check_ignores(db, monkeypatch, capsys):
     coord.set_node_flags(conn, "THEIRS", session="session-A")
     run(db, "status")
     out = capsys.readouterr().out
-    assert "NOT enforced" in out and "owned by session-A" in out
+    assert "nothing in this session enforces it" in out
+    assert "owned by session-A" in out
 
 
 def test_adopt_all_takes_on_every_loose_criterion(db, monkeypatch, capsys):

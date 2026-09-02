@@ -199,7 +199,7 @@ def test_stale_criterion_appears_in_check_output(db, capsys):
     run(db, "run")
     run(db, "check")
     lines = capsys.readouterr().out.splitlines()
-    assert any(line.startswith("C1 stale:") for line in lines)
+    assert any(line.startswith("C1 met, but the check is old") for line in lines)
 
 
 # Fix round 1: two Important findings, both defects inherited from the
@@ -340,29 +340,36 @@ def test_fact_add_and_list(db, capsys):
 
 def test_on_off_toggles_both_gates(db, capsys):
     assert run(db, "on") == 0
-    assert "scope=ON" in capsys.readouterr().out
+    assert "scope on" in capsys.readouterr().out
     run(db, "off")
-    assert "scope=off" in capsys.readouterr().out
+    assert "scope off" in capsys.readouterr().out
 
 
 def test_only_flag_toggles_one_gate(db, capsys):
     """Gates default on, so --only must be shown to move exactly one."""
     run(db, "off", "--only", "scope")
     out = capsys.readouterr().out
-    assert "scope=off" in out and "loop=ON" in out
+    assert "scope off" in out and "loop on" in out
+
+
+def test_the_gate_line_says_what_each_gate_holds_up(db, capsys):
+    """"scope=ON loop=off" told a reader who had met neither word nothing."""
+    run(db, "on")
+    out = capsys.readouterr().out
+    assert "agent dispatch" in out and "turn end" in out
 
 
 def test_status_reports_gate_state(db, capsys):
     run(db, "on")
     capsys.readouterr()
     run(db, "status")
-    assert "gates:" in capsys.readouterr().out
+    assert "Gates:" in capsys.readouterr().out
 
 
 def test_bare_invocation_reports_status_and_succeeds(db, capsys):
     """`loopgraph` with no subcommand must not be an argparse error."""
     assert run(db) == 0
-    assert "gates:" in capsys.readouterr().out
+    assert "Gates:" in capsys.readouterr().out
 
 
 def test_status_exits_zero_even_when_work_remains(db):
