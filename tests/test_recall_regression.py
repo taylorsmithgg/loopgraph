@@ -122,13 +122,16 @@ def _pinned_corpus():
     connection, its size and the ids present, so callers can fail on a
     shortfall rather than measure a quietly different denominator.
 
-    Building it costs about forty seconds, from 214 retains each autolinking
-    against the rows already inserted. Insertion order is not the reason:
-    date order and hash order build 101 and 104 edges and score identically
-    at @1 10, @5 16, so the floors do not depend on it. The cost is the
-    contents -- these memories are topically denser than a sample drawn
-    across the whole corpus, so more link candidates survive the mutual
-    check. Cached under the key above either way.
+    `ORDER BY created_at, id` is there to make the build deterministic, not
+    to make it faithful: date order and hash order build 101 and 104 edges
+    and both score @1 10, @5 16, so the ordering does not affect what these
+    floors measure.
+
+    Building costs about forty seconds either way, from 214 retains each
+    autolinking against the rows already inserted. Why these 214 cost four
+    times what a same-sized sample drawn across the whole corpus did was not
+    investigated, because the cache below made it moot: 40s once per change
+    to the corpus or the package, 0.3s after.
     """
     live = memory.open_memory()
     rows = []
