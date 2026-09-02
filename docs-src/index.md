@@ -119,24 +119,27 @@ $ loopgraph check; echo "exit=$?"
 1 never checked.
 C1 never checked
 These checks have never been run: C1 (R-05)
+1 check has never been audited (C1). Run `loopgraph game` to look at them.
 Not finished. There is still work to do.
 Gates: scope on (agent dispatch), loop on (turn end)
 Session: (none)
-Database: /Users/you/.loopgraph/2f1c….db
+Database: /Users/you/.loopgraph/2f1c93a7e04b1d58.db
 exit=1
 
 $ loopgraph run && loopgraph check; echo "exit=$?"
 1 met.
+1 check has never been audited (C1). Run `loopgraph game` to look at them.
 Finished. Everything specified has been met.
 Gates: scope on (agent dispatch), loop on (turn end)
 Session: (none)
-Database: /Users/you/.loopgraph/2f1c….db
+Database: /Users/you/.loopgraph/2f1c93a7e04b1d58.db
 exit=0
 ```
 
 `add` and `run` say nothing when they succeed. `check` is the command that
-reports, and its last four lines are the same every time: whether the work is
-finished, which gates are on, and where the state lives.
+reports. Every run of it ends the same four lines: whether the work is
+finished, which gates are on, this session's key, and the database in use.
+Only the first of those four changes as the work moves.
 
 `add` refuses a check that already passes, because one that is green before the
 work cannot tell done from not-done. Among checks that do discriminate, the

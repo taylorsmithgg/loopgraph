@@ -174,24 +174,27 @@ loopgraph changes no behaviour until a <code>SCOPE:</code> line or a criterion a
 <span class="go">1 never checked.</span>
 <span class="go">C1 never checked</span>
 <span class="go">These checks have never been run: C1 (R-05)</span>
+<span class="go">1 check has never been audited (C1). Run `loopgraph game` to look at them.</span>
 <span class="go">Not finished. There is still work to do.</span>
 <span class="go">Gates: scope on (agent dispatch), loop on (turn end)</span>
 <span class="go">Session: (none)</span>
-<span class="go">Database: /Users/you/.loopgraph/2f1c….db</span>
+<span class="go">Database: /Users/you/.loopgraph/2f1c93a7e04b1d58.db</span>
 <span class="go">exit=1</span>
 
 <span class="gp">$ </span>loopgraph<span class="w"> </span>run<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>loopgraph<span class="w"> </span>check<span class="p">;</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;exit=</span><span class="nv">$?</span><span class="s2">&quot;</span>
 <span class="go">1 met.</span>
+<span class="go">1 check has never been audited (C1). Run `loopgraph game` to look at them.</span>
 <span class="go">Finished. Everything specified has been met.</span>
 <span class="go">Gates: scope on (agent dispatch), loop on (turn end)</span>
 <span class="go">Session: (none)</span>
-<span class="go">Database: /Users/you/.loopgraph/2f1c….db</span>
+<span class="go">Database: /Users/you/.loopgraph/2f1c93a7e04b1d58.db</span>
 <span class="go">exit=0</span>
 </code></pre></div>
 
 <p><code>add</code> and <code>run</code> say nothing when they succeed. <code>check</code> is the command that
-reports, and its last four lines are the same every time: whether the work is
-finished, which gates are on, and where the state lives.</p>
+reports. Every run of it ends the same four lines: whether the work is
+finished, which gates are on, this session's key, and the database in use.
+Only the first of those four changes as the work moves.</p>
 <p><code>add</code> refuses a check that already passes, because one that is green before the
 work cannot tell done from not-done. Among checks that do discriminate, the
 widest one wins — see <a href="gates.html#weakness-not-brevity">weakness, not brevity</a>.</p>

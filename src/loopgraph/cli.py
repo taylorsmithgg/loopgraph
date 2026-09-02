@@ -101,6 +101,31 @@ STATE_WORDS = {
     "blocked": "Stopped: blocked on something outside this graph.",
     "no-op": "Nothing to do: no checkable end state was ever declared here.",
 }
+# Rules are presented here, not reworded in rules.py: `detail` is part of the
+# `report["rules"]` payload that `status --json` emits, so a presentation fix
+# has no business changing it. The id stays, because it is the lookup key in
+# the design docs, but it follows the sentence instead of leading it -- "R-06
+# orphan criteria: C2" opened on the one token that means nothing to a reader
+# and buried the part they can act on.
+#
+# Only the rules whose detail is a label plus a list of ids are here. R-01 and
+# R-04 read as English already ("no criterion closed in 20 turns"), and there
+# is nothing to replace without parsing their numbers back out.
+RULE_WORDS = {
+    "R-02": "these checks are old enough to need re-running",
+    "R-05": "these checks have never been run",
+    "R-06": "these criteria have no goal above them",
+    "R-07": "these criteria depend on each other in a loop",
+}
+
+
+def _rule_line(rule: dict) -> str:
+    """One rule, as a sentence, with the values it fired on."""
+    detail, rid = rule["detail"], rule["rule"]
+    words = RULE_WORDS.get(rid)
+    if words is None or ": " not in detail:
+        return f"{detail[:1].upper()}{detail[1:]} ({rid})"
+    return f"{words[:1].upper()}{words[1:]}: {detail.split(': ', 1)[1]} ({rid})"
 
 
 def _print_human(conn, report) -> None:
@@ -132,11 +157,7 @@ def _print_human(conn, report) -> None:
     for cid, deps in sorted(report["blocked"].items()):
         print(f"{cid} is waiting for {', '.join(deps)}")
     for rule in report["rules"]:
-        # The id trails the sentence rather than leading it. "R-06 orphan
-        # criteria: C2" opened with the one token that means nothing to a
-        # reader and buried the part they can act on.
-        text = rule["detail"]
-        print(f"{text[:1].upper()}{text[1:]} ({rule['rule']})")
+        print(_rule_line(rule))
     aud = coord.audit_state(conn)
     if aud["gameable"]:
         print("These checks could pass without the work being done: "

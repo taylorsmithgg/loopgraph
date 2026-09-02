@@ -353,7 +353,8 @@ def test_only_flag_toggles_one_gate(db, capsys):
 
 
 def test_the_gate_line_says_what_each_gate_holds_up(db, capsys):
-    """"scope=ON loop=off" told a reader who had met neither word nothing."""
+    """A reader who had met neither word learned nothing from the old
+    `scope=ON loop=off`, so each gate now names what it holds up."""
     run(db, "on")
     out = capsys.readouterr().out
     assert "agent dispatch" in out and "turn end" in out
