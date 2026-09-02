@@ -10,6 +10,15 @@ category that must not be skimmed.
 
 So: queue silently, review deliberately. `loopgraph security` shows everything
 outstanding in one pass, grouped by reason, and `--clear` marks it handled.
+
+The queue is append-only, and for a while that was the whole story -- which
+meant it had no way to say that a finding no longer applies. `mem forget`
+deletes the node, the index row and the markdown file, and left the finding
+behind naming an id that then existed in neither store. Read from the queue
+side that looks exactly like the two memory stores having diverged, and three
+of them were sitting in this queue before `retract` existed. Retraction is a
+tombstone rather than a rewrite: the finding stays on disk for the audit, and
+`pending` stops offering it.
 """
 from __future__ import annotations
 
@@ -25,6 +34,19 @@ import time
 QUEUE = os.environ.get("LOOPGRAPH_SECURITY_QUEUE") or os.path.join(
     os.path.expanduser("~"), ".loopgraph", "security.jsonl")
 REVIEWED = os.path.join(os.path.expanduser("~"), ".loopgraph", "security.reviewed")
+
+# Not a `kind` any caller files. Prefixed so it cannot collide with a real
+# finding kind, and skipped by `pending` so a tombstone never reads as work.
+RETRACTED = "__retracted__"
+
+# The one finding kind whose subject IS a memory id, so the only kind that can
+# be resolved against the memory index. The rest of the queue is a mixed
+# namespace -- an account, a host, a certificate batch -- and an open account
+# compromise was sitting two rows below three stale memory findings. Named
+# here rather than spelled out at the producer and the consumer separately:
+# if those two strings drift, resolution matches nothing and stale rows
+# accumulate again, which is the failure this constant exists to prevent.
+MEMORY_WITHHELD = "memory withheld at safe scope"
 
 
 def queue(kind: str, subject: str, detail: str = "", path: str | None = None) -> None:
@@ -47,14 +69,71 @@ def _mark(path: str | None = None) -> float:
         return 0.0
 
 
+def retract(subject: str, path: str | None = None) -> None:
+    """Withdraw every finding filed against `subject` up to now.
+
+    Idempotent, and scoped by time rather than by subject alone: a subject
+    retracted today can be queued again tomorrow -- re-retaining a memory
+    under the same id is the ordinary case -- and the new finding must still
+    surface.
+    """
+    p = path or QUEUE
+    try:
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"ts": time.time(), "kind": RETRACTED,
+                                 "subject": subject[:160], "detail": ""}) + "\n")
+    except OSError:
+        pass                       # a queue failure must not fail the work
+
+
+def _rows(path: str | None = None) -> list[dict]:
+    """Every row on disk, skipping any line that will not parse.
+
+    The comprehension that read this file sat inside the try that catches
+    ValueError, so a single truncated line -- one interrupted append, one
+    concurrent writer -- returned an empty queue and reported "nothing
+    outstanding" over the top of an untriaged account compromise. Retraction
+    doubles the write traffic into the file, which makes a torn line likelier
+    rather than less. A bad line now costs that one finding, not all of them.
+    """
+    out: list[dict] = []
+    try:
+        fh = open(path or QUEUE, encoding="utf-8")
+    except OSError:
+        return out
+    with fh:
+        for line in fh:
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(row, dict):
+                out.append(row)
+    return out
+
+
 def pending(path: str | None = None, mark_path: str | None = None) -> list[dict]:
     since = _mark(mark_path)
-    try:
-        with open(path or QUEUE, encoding="utf-8") as fh:
-            rows = [json.loads(l) for l in fh if l.strip()]
-    except (OSError, ValueError):
-        return []
-    return [r for r in rows if r.get("ts", 0) > since]
+    rows = _rows(path)
+    retracted: dict[str, float] = {}
+    for r in rows:
+        if r.get("kind") == RETRACTED:
+            s = r.get("subject", "")
+            retracted[s] = max(retracted.get(s, 0.0), r.get("ts", 0.0))
+    out = []
+    for r in rows:
+        if r.get("kind") == RETRACTED:
+            continue
+        ts = r.get("ts", 0)
+        if ts <= since:
+            continue
+        if ts <= retracted.get(r.get("subject", ""), 0.0):
+            continue
+        out.append(r)
+    return out
 
 
 def clear(path: str | None = None, mark_path: str | None = None) -> int:
