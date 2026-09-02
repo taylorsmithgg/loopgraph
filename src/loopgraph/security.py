@@ -145,21 +145,34 @@ def clear(path: str | None = None, mark_path: str | None = None) -> int:
     return n
 
 
+def _age(seconds: float) -> str:
+    """How old, in words. "15.6d" is a log line, not a sentence."""
+    days = seconds / 86400
+    if days < 1:
+        return "less than a day old"
+    if days < 2:
+        return "a day old"
+    return f"{round(days)} days old"
+
+
 def report(path: str | None = None, mark_path: str | None = None) -> str:
     rows = pending(path, mark_path)
     if not rows:
-        return "security: nothing outstanding"
+        return "Nothing to review. Every security note has been dealt with."
     groups: dict[str, list[dict]] = {}
     for r in rows:
         groups.setdefault(r.get("detail") or r.get("kind", "?"), []).append(r)
     oldest = min(r.get("ts", 0) for r in rows)
-    age_d = (time.time() - oldest) / 86400
-    out = [f"security review: {len(rows)} item(s), oldest {age_d:.1f}d old"]
+    count = ("1 security note is waiting for you" if len(rows) == 1
+             else f"{len(rows)} security notes are waiting for you")
+    out = [f"{count}. The oldest is {_age(time.time() - oldest)}.", ""]
     for reason, items in sorted(groups.items(), key=lambda kv: -len(kv[1])):
         out.append(f"  {len(items):4}  {reason}")
         for it in items[:3]:
-            out.append(f"          {it['subject']}")
+            out.append(f"        {it['subject']}")
         if len(items) > 3:
-            out.append(f"          +{len(items) - 3} more")
-    out.append("  `loopgraph security --clear` once handled.")
+            out.append(f"        and {len(items) - 3} more")
+    out.append("")
+    out.append("Run `loopgraph security --clear` once you have handled "
+               + ("it." if len(rows) == 1 else "them."))
     return "\n".join(out)

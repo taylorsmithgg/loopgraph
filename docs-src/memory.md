@@ -13,6 +13,59 @@ Graphiti, Mem0 and LangMem each want their own store, sitting beside a graph
 that already has typed nodes, typed edges and an append-only delta log with a
 logical clock. The store was never the missing piece. Retrieval was.
 
+## The two places a memory lives
+
+Each memory is a markdown file you can read and edit, and an entry in a
+search index built from those files. The files are the real thing. The index
+only makes them findable, and `mem reindex` rebuilds it from the files at any
+time.
+
+Both halves matter when you delete a memory. `mem forget` clears the file and
+the search entry together, and it tells you when it only found one:
+
+```console
+$ mem forget the-edge-collector-is-32-bit
+Forgot the-edge-collector-is-32-bit. Its search entry had already been
+deleted, so only the other half needed clearing up.
+```
+
+Nothing is wrong there. One half had already gone and the command tidied up
+the rest. You only get an error when neither half exists:
+
+```console
+$ mem forget somehing-mistyped
+There is no memory called somehing-mistyped. Search for the right name with:
+mem recall "<a few words>"
+```
+
+## Security notes, collected for one review
+
+When you save a memory that contains something private -- a password, an
+internal address, a client name from your own term list -- loopgraph keeps
+that memory and quietly writes itself a note about it. It does not interrupt
+you. An earlier version announced every one, printed 98 times in a single
+session, and a running commentary about security teaches you to skim the one
+category you should never skim.
+
+Read the notes when it suits you:
+
+```console
+$ loopgraph security
+134 security notes are waiting for you. The oldest is 16 days old.
+
+    61  credential material or its location
+        opensearch-tenant-sso-redirect-loop-2026-08-19
+        clearwater-tenant-opensearch-oidc-the-client-sec
+        and 59 more
+
+Run `loopgraph security --clear` once you have handled them.
+```
+
+Two housekeeping commands go with it. `--clear` marks everything currently
+listed as reviewed. `--prune` drops notes about memories you have since
+forgotten, and it leaves everything else alone -- notes you filed by hand
+about an account or a host are never touched by it.
+
 ## How it behaves
 
 **Global, not per-repo.** One file, `~/.loopgraph/memory.db`. A trap learned in

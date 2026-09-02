@@ -205,15 +205,18 @@ def _mem(args) -> int:
         return 0
 
     if args.mem_cmd == "forget":
-        # Two stores, so three outcomes, and the old code collapsed them into
-        # one: it removed the file, ignored whether that had done anything,
-        # then reported only on the node. Forgetting a memory whose node was
-        # already gone deleted the markdown and still exited 2 "no such
-        # memory" -- which reads as "nothing was touched" while a file has in
-        # fact just been deleted. Only an id absent from BOTH stores is
-        # unknown; an id in one of them is a divergence being repaired, and
-        # saying which store held it is the difference between a scary
-        # message and a diagnosis.
+        # Two places hold a memory, so there are three outcomes, and the old
+        # code collapsed them into one: it deleted the note file, ignored
+        # whether that had done anything, then reported only on the search
+        # entry. Forgetting a memory whose entry was already gone deleted the
+        # file and still exited 2 "no such memory" -- which reads as "nothing
+        # was touched" just after a file was deleted. Only an id missing from
+        # BOTH places is unknown.
+        #
+        # The wording says "note file" and "search entry" rather than corpus
+        # and index, because a person who runs `mem forget` and gets a
+        # sentence about two stores diverging has been handed our filing
+        # system instead of an answer.
         from . import security as _sec
         missing, repaired = [], []
         for i in args.id:
@@ -222,17 +225,19 @@ def _mem(args) -> int:
             if not (had_file or had_node):
                 missing.append(i)
                 continue
-            # The finding outlives the memory otherwise. The queue is
-            # append-only and knows nothing about deletion, so a forgotten
-            # memory left a row naming an id that exists in neither store.
+            # The security note outlives the memory otherwise. The queue only
+            # ever grew, so forgetting a memory left a note naming something
+            # that no longer existed anywhere.
             _sec.retract(i)
             if had_file != had_node:
-                repaired.append((i, "the index" if had_node else "the corpus"))
-        for i, where in repaired:
-            print(f"mem forget: {i} was only in {where} -- the other store had "
-                  "already lost it, now consistent", file=sys.stderr)
+                gone = "note file" if had_node else "search entry"
+                repaired.append((i, gone))
+        for i, gone in repaired:
+            print(f"Forgot {i}. Its {gone} had already been deleted, so only "
+                  "the other half needed clearing up.", file=sys.stderr)
         if missing:
-            print(f"mem forget: no such memory: {', '.join(missing)}",
+            print(f"There is no memory called {', '.join(missing)}. "
+                  "Search for the right name with: mem recall \"<a few words>\"",
                   file=sys.stderr)
             return 2
         return 0
@@ -256,14 +261,17 @@ def _mem(args) -> int:
         seen = {r["key"].split(":", 1)[1]: r["value"] for r in rows}
         for h in sorted(known):
             when = seen.get(h)
-            print(f"  {h:<14} {'last recall hook ' + when[:19] if when else 'NEVER fired'}")
-        print(f"\nscope here: {memory.scope_default()}   "
-              f"corpus: {args.corpus}")
+            print(f"  {h:<14} " + (f"last looked something up on {when[:10]}"
+                                   if when else "has never looked anything up"))
+        print(f"\nSensitive memories here: "
+              f"{'shown' if memory.scope_default() == 'full' else 'hidden'}")
+        print(f"Memory files: {args.corpus}")
         missing = sorted(known - set(seen))
         if missing:
-            print(f"\n{len(missing)} harness(es) have never invoked the hook. "
-                  "That is either uninstalled, an unmatched payload contract, "
-                  "or simply unused since install - not proof it works.")
+            print(f"\n{len(missing)} of these tools have never looked anything "
+                  "up. Either the hook is not installed, it is installed but "
+                  "not working, or you have not used that tool since. Seeing "
+                  "a date is the only proof it works.")
         return 0
 
     if args.mem_cmd == "reflect":
@@ -272,23 +280,23 @@ def _mem(args) -> int:
             print(json.dumps(groups, indent=2))
             return 0
         if not groups:
-            print("nothing to reflect on: every cluster already has a "
-                  "conclusion sitting on it")
+            print("Nothing to look at. Every group of related memories "
+                  "already has a conclusion written against it.")
             return 0
-        print(f"{len(groups)} clusters of related memories that nobody has "
-              "drawn a conclusion from:\n")
+        print(f"{len(groups)} groups of related memories have no conclusion "
+              "written against them yet.\n")
         for g in groups:
-            print(f"  about: {', '.join(g['shared']) or '(linked, no shared terms)'}")
+            print(f"  All about: {', '.join(g['shared']) or 'no words in common'}")
             for m in g["members"]:
                 print(f"    - {m}")
-            print("    -> if there is a lesson here, write it:")
+            print("    If there is a lesson here, write it down:")
             print('       mem retain "<what this means>" --kind model\n')
         return 0
 
     if args.mem_cmd == "reindex":
         got = memory.reindex(conn, args.corpus)
-        print(f"rebuilt from {args.corpus}: {got['imported']} memories, "
-              f"{got['linked']} links")
+        print(f"Rebuilt the search index from {args.corpus}: "
+              f"{got['imported']} memories and {got['linked']} links.")
         return 0
 
     if args.mem_cmd == "harvest":
@@ -305,15 +313,17 @@ def _mem(args) -> int:
         if args.json:
             print(json.dumps(got, indent=2))
             return 0
-        print(f"scanned {got['scanned']} transcripts")
-        print(f"\nrediscovered across sessions (>= {args.min_sessions}):")
+        print(f"Read {got['scanned']} past sessions.")
+        print(f"\nProblems you have hit again and again, in "
+              f"{args.min_sessions} sessions or more:")
         for r in got["recurring_errors"]:
             print(f"  [{r['sessions']:>3} sessions] {r['example'][:160]}")
-        print("\ncorrections (most recent):")
+        print("\nTimes you were corrected, most recent last:")
         for c in got["corrections"][-15:]:
             print(f"  {c['text'][:160]}")
-        print("\nThese are candidates, not memories. Distil the ones worth "
-              "keeping:\n  mem retain \"<the fact>\" --kind world --tags harvested")
+        print("\nNone of this is saved yet. Pick the ones worth keeping and "
+              "write each one down:\n"
+              "  mem retain \"<the fact>\" --kind world --tags harvested")
         return 0
 
     if args.mem_cmd == "import":
@@ -600,14 +610,23 @@ def main(argv: list[str] | None = None) -> int:
                             and r.get("subject") not in live})
             for s in stale:
                 _sec.retract(s)
-            print(f"security: retracted {len(stale)} finding(s) about "
-                  "forgotten memories")
+            if not stale:
+                print("Nothing to clear up. Every security note still refers "
+                      "to a memory that exists.")
+                return 0
+            noun = "note" if len(stale) == 1 else "notes"
+            print(f"Cleared {len(stale)} security {noun} about memories you "
+                  "have since forgotten:")
             for s in stale:
                 print(f"  {s}")
             return 0
         if args.clear:
             n = _sec.clear()
-            print(f"security: {n} item(s) marked reviewed")
+            if not n:
+                print("Nothing was waiting to be reviewed.")
+            else:
+                noun = "note" if n == 1 else "notes"
+                print(f"Marked {n} security {noun} as reviewed.")
             return 0
         if args.json:
             print(json.dumps(_sec.pending(), indent=2))

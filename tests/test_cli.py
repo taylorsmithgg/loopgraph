@@ -422,25 +422,30 @@ def test_forget_removes_both_stores(db, mem_env, capsys):
 
 
 def test_forget_of_a_file_only_memory_succeeds_and_says_so(db, mem_env, capsys):
-    """The index is disposable, so a file can outlive its node. Deleting that
-    file is work done, and exiting 2 'no such memory' denied it."""
+    """The search index is disposable, so a note file can outlive its entry.
+    Deleting that file is work done, and exiting 2 'no such memory' denied
+    it. The message names the half that was already missing, in words a
+    reader does not have to know our storage layout to follow."""
     from loopgraph.memory import write_markdown
     write_markdown(mem_env, "orphan-file", "a fact", "world")
     assert mem(db, mem_env, "forget", "orphan-file") == 0
-    assert "only in the corpus" in capsys.readouterr().err
+    assert "Its search entry had already been deleted" in capsys.readouterr().err
 
 
 def test_forget_of_an_index_only_memory_succeeds_and_says_so(db, mem_env, capsys):
     mem(db, mem_env, "retain", "index only", "--no-file")
     mid = capsys.readouterr().out.strip()
     assert mem(db, mem_env, "forget", mid) == 0
-    assert "only in the index" in capsys.readouterr().err
+    assert "Its note file had already been deleted" in capsys.readouterr().err
 
 
 def test_forget_of_an_unknown_id_still_fails(db, mem_env, capsys):
-    """Absent from both stores is the only real error."""
+    """Absent from both places is the only real error, and the message says
+    how to find the right name rather than only that this one was wrong."""
     assert mem(db, mem_env, "forget", "never-existed") == 2
-    assert "no such memory" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "There is no memory called never-existed" in err
+    assert "mem recall" in err
 
 
 def test_forget_retracts_the_finding_it_filed(db, mem_env, capsys):

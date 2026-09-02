@@ -74,6 +74,48 @@
 Graphiti, Mem0 and LangMem each want their own store, sitting beside a graph
 that already has typed nodes, typed edges and an append-only delta log with a
 logical clock. The store was never the missing piece. Retrieval was.</p>
+<h2 id="the-two-places-a-memory-lives">The two places a memory lives<a class="headerlink" href="#the-two-places-a-memory-lives" title="Permanent link">#</a></h2>
+<p>Each memory is a markdown file you can read and edit, and an entry in a
+search index built from those files. The files are the real thing. The index
+only makes them findable, and <code>mem reindex</code> rebuilds it from the files at any
+time.</p>
+<p>Both halves matter when you delete a memory. <code>mem forget</code> clears the file and
+the search entry together, and it tells you when it only found one:</p>
+<div class="codehilite"><pre><span></span><code><span class="gp">$ </span>mem<span class="w"> </span>forget<span class="w"> </span>the-edge-collector-is-32-bit
+<span class="go">Forgot the-edge-collector-is-32-bit. Its search entry had already been</span>
+<span class="go">deleted, so only the other half needed clearing up.</span>
+</code></pre></div>
+
+<p>Nothing is wrong there. One half had already gone and the command tidied up
+the rest. You only get an error when neither half exists:</p>
+<div class="codehilite"><pre><span></span><code><span class="gp">$ </span>mem<span class="w"> </span>forget<span class="w"> </span>somehing-mistyped
+<span class="go">There is no memory called somehing-mistyped. Search for the right name with:</span>
+<span class="go">mem recall &quot;&lt;a few words&gt;&quot;</span>
+</code></pre></div>
+
+<h2 id="security-notes-collected-for-one-review">Security notes, collected for one review<a class="headerlink" href="#security-notes-collected-for-one-review" title="Permanent link">#</a></h2>
+<p>When you save a memory that contains something private -- a password, an
+internal address, a client name from your own term list -- loopgraph keeps
+that memory and quietly writes itself a note about it. It does not interrupt
+you. An earlier version announced every one, printed 98 times in a single
+session, and a running commentary about security teaches you to skim the one
+category you should never skim.</p>
+<p>Read the notes when it suits you:</p>
+<div class="codehilite"><pre><span></span><code><span class="gp">$ </span>loopgraph<span class="w"> </span>security
+<span class="go">134 security notes are waiting for you. The oldest is 16 days old.</span>
+
+<span class="go">    61  credential material or its location</span>
+<span class="go">        opensearch-tenant-sso-redirect-loop-2026-08-19</span>
+<span class="go">        clearwater-tenant-opensearch-oidc-the-client-sec</span>
+<span class="go">        and 59 more</span>
+
+<span class="go">Run `loopgraph security --clear` once you have handled them.</span>
+</code></pre></div>
+
+<p>Two housekeeping commands go with it. <code>--clear</code> marks everything currently
+listed as reviewed. <code>--prune</code> drops notes about memories you have since
+forgotten, and it leaves everything else alone -- notes you filed by hand
+about an account or a host are never touched by it.</p>
 <h2 id="how-it-behaves">How it behaves<a class="headerlink" href="#how-it-behaves" title="Permanent link">#</a></h2>
 <p><strong>Global, not per-repo.</strong> One file, <code>~/.loopgraph/memory.db</code>. A trap learned in
 one repo is worth the most in a different one.</p>

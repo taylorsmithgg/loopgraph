@@ -77,6 +77,24 @@ loopgraph fact add <id> --text "..." | brief   # traps to paste into dispatch
 loopgraph frontier <agent>                     # what a killed agent finished
 ```
 
+Memory and the security notes it collects have their own commands:
+
+```
+mem retain "<the fact>" --kind world|experience|model   # save something
+mem recall "<a few words>"                # search; exit 1 when nothing matches
+mem forget <name>                         # delete the file and the search entry
+mem reindex                               # rebuild the search index from the files
+loopgraph security                        # what is waiting to be reviewed
+loopgraph security --clear                # mark everything listed as reviewed
+loopgraph security --prune                # drop notes about forgotten memories
+```
+
+`mem recall` is the one exception to reading exit codes as success or failure:
+it exits 1 when it finds nothing, so a script can tell "nothing is known"
+from "here is what is known" without reading the text. `mem forget` exits 2
+only when the name exists in neither the files nor the search index. Finding
+it in just one is normal, and the command says so and exits 0.
+
 ## Invoking it
 
 Three ways, all the same CLI:

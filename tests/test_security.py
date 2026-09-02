@@ -23,7 +23,7 @@ def test_findings_accumulate_for_one_pass(tmp_path):
     for i in range(3):
         security.queue("withheld", f"id-{i}", "credential material", path=q)
     assert len(security.pending(q, m)) == 3
-    assert "3 item(s)" in security.report(q, m)
+    assert "3 security notes are waiting" in security.report(q, m)
 
 
 def test_clear_marks_everything_reviewed(tmp_path):
@@ -31,7 +31,7 @@ def test_clear_marks_everything_reviewed(tmp_path):
     security.queue("withheld", "id-1", "an IP address", path=q)
     assert security.clear(q, m) == 1
     assert security.pending(q, m) == []
-    assert "nothing outstanding" in security.report(q, m)
+    assert "Every security note has been dealt with" in security.report(q, m)
 
 
 def test_items_queued_after_a_review_still_surface(tmp_path):
@@ -55,7 +55,7 @@ def test_a_tombstone_is_never_itself_a_finding(tmp_path):
     q, m = str(tmp_path / "q.jsonl"), str(tmp_path / "m")
     security.retract("never-queued", path=q)
     assert security.pending(q, m) == []
-    assert "nothing outstanding" in security.report(q, m)
+    assert "Every security note has been dealt with" in security.report(q, m)
 
 
 def test_retracting_twice_is_harmless(tmp_path):
@@ -99,4 +99,4 @@ def test_one_torn_line_does_not_empty_the_queue(tmp_path):
                    path=q)
     assert [r["subject"] for r in security.pending(q, m)] == ["before",
                                                              "real-account"]
-    assert "2 item(s)" in security.report(q, m)
+    assert "2 security notes are waiting" in security.report(q, m)
