@@ -439,6 +439,47 @@ def test_forgetting_removes_the_file_and_the_index_line(tmp_path):
     assert "- [m.md]" not in (d / "MEMORY.md").read_text()
 
 
+def _index_writer(directory: str, chunk: list[str]) -> None:
+    from loopgraph.memory import write_markdown
+    for mid in chunk:
+        write_markdown(directory, mid, f"fact {mid}", "world")
+
+
+# spawn rather than fork: forking a multi-threaded pytest process risks a
+# deadlock in the child, and spawn reproduces the race just as reliably --
+# measured both ways, with the lock removed this loses most of the 80 lines
+# and with it none.
+def test_concurrent_index_writes_do_not_lose_lines(tmp_path):
+    """MEMORY.md is one shared file and several sessions write it at once.
+
+    Both index writers were read-modify-write with nothing in between, so the
+    loser of a race left its memory file on disk unlisted -- present in the
+    directory, invisible to every session that loads the index. Observed
+    live: a line written at 16:45:58 was gone within the minute, while a
+    second process was repairing two older lines lost the same way.
+    """
+    import multiprocessing as mp
+    from loopgraph.memory import write_markdown
+
+    d = str(tmp_path / "corpus")
+    ids = [f"mem-{i:03d}" for i in range(80)]
+    write_markdown(d, "seed", "seed fact", "world")
+
+    ctx = mp.get_context("spawn")
+    procs = [ctx.Process(target=_index_writer, args=(d, ids[i::4]))
+             for i in range(4)]
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join(60)
+    assert [p.exitcode for p in procs] == [0, 0, 0, 0]
+
+    listed = open(os.path.join(d, "MEMORY.md"), encoding="utf-8").read()
+    lost = [m for m in ids if f"- [{m}.md]" not in listed]
+    assert lost == [], f"{len(lost)} of {len(ids)} index lines lost to a race"
+    assert listed.count("- [seed.md]") == 1
+
+
 def test_the_index_is_disposable_and_rebuilds_from_the_files(tmp_path, monkeypatch):
     monkeypatch.setenv("LOOPGRAPH_MEM_SCOPE", "full")
     from loopgraph.memory import reindex, write_markdown

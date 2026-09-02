@@ -30,11 +30,14 @@ graph -- a trap learned in one repo is worth the most in a different one.
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import json
 import os
 import re
 import sqlite3
 import sys
+import tempfile
 from datetime import datetime, timezone
 
 from .db import SCHEMA, emit_delta, meta_get, meta_set, utcnow
@@ -915,21 +918,65 @@ def write_markdown(
     return path
 
 
+# MEMORY.md is one shared file, and five sessions run against it at once here.
+# Both index writers were read-modify-write with nothing in between, so two
+# concurrent retains raced and the loser's line vanished: the memory file sat
+# on disk unlisted, invisible to every session that loads the index rather
+# than the directory. Caught in the act -- a line written at 16:45:58 was
+# gone by 16:46, while a second process was repairing two older lines lost
+# the same way.
+#
+# So the whole read-modify-write is serialised on a sidecar lock, and the
+# write is a rename over the top rather than a truncate: a crash mid-write
+# leaves the old index, never half of one.
+def _index_lock_path(directory: str) -> str:
+    return os.path.join(directory, ".MEMORY.md.lock")
+
+
+@contextlib.contextmanager
+def _index_lock(directory: str):
+    os.makedirs(directory, exist_ok=True)
+    fh = open(_index_lock_path(directory), "a+")
+    try:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+        finally:
+            fh.close()
+
+
+def _write_atomic(path: str, text: str) -> None:
+    d = os.path.dirname(path) or "."
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".MEMORY.md.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
+
+
 def _index_markdown(directory: str, mid: str, hook: str) -> None:
     index = os.path.join(directory, "MEMORY.md")
     line = f"- [{mid}.md]({mid}.md) — {hook}"
-    try:
-        lines = open(index, encoding="utf-8").read().splitlines()
-    except OSError:
-        lines = ["# Memory Index", ""]
-    for i, existing in enumerate(lines):
-        if existing.startswith(f"- [{mid}.md]"):
-            lines[i] = line                        # refresh in place
-            break
-    else:
-        lines.append(line)
-    with open(index, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(lines).rstrip() + "\n")
+    with _index_lock(directory):
+        try:
+            lines = open(index, encoding="utf-8").read().splitlines()
+        except OSError:
+            lines = ["# Memory Index", ""]
+        for i, existing in enumerate(lines):
+            if existing.startswith(f"- [{mid}.md]"):
+                lines[i] = line                    # refresh in place
+                break
+        else:
+            lines.append(line)
+        _write_atomic(index, "\n".join(lines).rstrip() + "\n")
 
 
 def remove_markdown(directory: str, mid: str) -> bool:
@@ -939,13 +986,14 @@ def remove_markdown(directory: str, mid: str) -> bool:
     if os.path.exists(path):
         os.remove(path)
         removed = True
-    try:
-        lines = open(index, encoding="utf-8").read().splitlines()
-        kept = [l for l in lines if not l.startswith(f"- [{mid}.md]")]
-        if len(kept) != len(lines):
-            open(index, "w", encoding="utf-8").write("\n".join(kept).rstrip() + "\n")
-    except OSError:
-        pass
+    with _index_lock(directory):
+        try:
+            lines = open(index, encoding="utf-8").read().splitlines()
+            kept = [l for l in lines if not l.startswith(f"- [{mid}.md]")]
+            if len(kept) != len(lines):
+                _write_atomic(index, "\n".join(kept).rstrip() + "\n")
+        except OSError:
+            pass
     return removed
 
 
