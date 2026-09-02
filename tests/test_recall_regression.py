@@ -32,12 +32,22 @@ from loopgraph import memory
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# The corpus slice every measurement below runs against. 214 is the size the
-# corpus had on 2026-08-17, when these floors were first measured, so the
-# numbers stay comparable with the ones recorded then. The twenty target
-# memories are always included; the rest of the slice is chosen by a stable
-# hash of the id, so it is the same set on every run and changes only when a
-# memory in it is forgotten.
+# The corpus every measurement below runs against: the memories that existed
+# on the day the floors were recorded, selected by their own created_at.
+#
+# A stable hash over a growing population is not stable. Sorting every
+# non-target memory by sha1 of its id and truncating still lets a newly
+# retained memory whose hash sorts early enter the slice and evict one, so
+# the composition churns as the corpus grows and the floors drift again on a
+# longer period. Cutting on the date removes growth from the selection
+# entirely: nothing retained after the baseline can enter, so the slice
+# changes only when a memory inside it is forgotten, and then the size assert
+# below fails loudly rather than the denominator changing in silence.
+#
+# On this machine the cut lands on exactly the original corpus -- 214
+# memories, all 29 rows the twenty cases target, 185 distractors -- so this
+# is not a sample of that corpus, it is that corpus.
+BASELINE_DATE = "2026-08-17"
 PINNED_SIZE = 214
 
 # Measured 2026-08-17 with first-line weighting, a length penalty, and
@@ -45,12 +55,13 @@ PINNED_SIZE = 214
 # lower them silently. @1 went 9 -> 10 by REMOVING links, which is why the
 # graph is guarded by this number and not by how connected it looks.
 #
-# FLOOR_AT5 re-measured 2026-09-02, from 16 to 15, and the reason is not a
-# ranking change: the slice is rebuilt from today's corpus by stable hash, so
-# its 194 distractors are not the 194 the original number saw. @1 came back
-# to exactly 10 on the pinned slice while it reads 5 on the live one, which is
-# what says the pinning is faithful and the drift was dilution.
-FLOOR_AT5 = 15
+# Re-measured 2026-09-02 on the date-cut corpus: @1 10, @5 16, both equal to
+# the values recorded above. That equality is the check on the reconstruction
+# -- the live corpus had grown to 711 by then and read @1 5, @5 15, and it
+# was dilution rather than any ranking change that moved it. No margin under
+# the measured value: margin absorbs drift, and the date cut leaves none to
+# absorb, so a floor a point low would just hide the next real regression.
+FLOOR_AT5 = 16
 FLOOR_AT1 = 10
 CASE_COUNT = 20
 
@@ -78,43 +89,66 @@ needs_corpus = pytest.mark.skipif(
     reason="needs this machine's memory corpus; nothing to measure without it")
 
 
-def _pinned_corpus(size: int = PINNED_SIZE):
-    """A fixed-size slice of the live corpus, rebuilt in a scratch database.
+def _cache_key(rows: list[tuple]) -> str:
+    """What the built database is a function of.
 
-    Every target memory the twenty cases name is included, because a question
-    whose answer is not present measures nothing. The distractors are the
-    remaining memories ordered by a stable hash of their id, so the slice is
-    identical run to run and shifts only when a memory inside it is forgotten
-    or its text is superseded.
-
-    Building it costs about ten seconds -- 214 retains, each autolinking
-    against the rows already inserted -- so it is module-scoped and the three
-    measurements below share one.
+    The corpus contents, and the module that ranks them. Keying on the corpus
+    alone would let a cached index built by the previous autolink survive a
+    change to autolink, and autolink is part of what these floors measure --
+    @1 went 9 to 10 by removing links. A stale hit would report the old code's
+    number as the new code's.
     """
-    ho = _holdout()
-    needles = []
-    for _, needle in ho.CASES:
-        needles += list(needle) if isinstance(needle, tuple) else [needle]
+    h = hashlib.sha256(BASELINE_DATE.encode())
+    for mid, statement, created, kind, tags in rows:
+        h.update(f"\0{mid}\0{statement}\0{created}\0{kind}\0{tags}".encode())
+    h.update(open(memory.__file__, "rb").read())
+    return h.hexdigest()[:16]
 
+
+def _pinned_corpus():
+    """The baseline corpus, rebuilt in a scratch database.
+
+    Selection is by `created_at`, so growth cannot touch it: a memory
+    retained after the baseline never enters, and the set changes only when
+    one inside it is forgotten. Returns the connection, its size, and the ids
+    present, so callers can fail on a shortfall rather than measure a quietly
+    different denominator.
+
+    Building it costs about forty-five seconds -- 214 retains, each
+    autolinking against the rows already inserted, and inserting in date
+    order puts topically related memories next to each other, which is the
+    expensive case for the mutual-link check. So the result is cached under
+    the key above and reused until either the corpus or the ranking module
+    changes.
+    """
     live = memory.open_memory()
     rows = []
     for r in live.execute(
-            "SELECT id, statement, created_at FROM nodes WHERE type='memory'"):
+            "SELECT id, statement, created_at FROM nodes WHERE type='memory' "
+            "AND substr(created_at, 1, 10) <= ? ORDER BY created_at, id",
+            (BASELINE_DATE,)):
         meta = memory.mem_meta(live, r["id"])
         rows.append((r["id"], r["statement"], r["created_at"],
                      meta.get("kind", "world"), tuple(meta.get("tags", []))))
+    ids = {r[0] for r in rows}
 
-    targets = [x for x in rows if any(w in x[0].lower() for w in needles)]
-    target_ids = {t[0] for t in targets}
-    others = sorted((x for x in rows if x[0] not in target_ids),
-                    key=lambda x: hashlib.sha1(x[0].encode()).hexdigest())
-    chosen = targets + others[:max(0, size - len(targets))]
+    path = os.path.join(tempfile.gettempdir(),
+                        f"loopgraph-pinned-{_cache_key(rows)}.db")
+    if os.path.exists(path):
+        return memory.open_memory(path), len(rows), ids
 
-    conn = memory.open_memory(os.path.join(tempfile.mkdtemp(), "pinned.db"))
-    for mid, statement, created, kind, tags in chosen:
+    building = path + ".building"
+    if os.path.exists(building):
+        os.remove(building)
+    conn = memory.open_memory(building)
+    for mid, statement, created, kind, tags in rows:
         memory.retain(conn, statement, kind=kind, tags=tags, id=mid,
                       created_at=created)
-    return conn, len(chosen)
+    conn.close()
+    # Rename only once it is complete: an interrupted build must not be
+    # picked up as a cache hit and measured as if it were the whole corpus.
+    os.replace(building, path)
+    return memory.open_memory(path), len(rows), ids
 
 
 @pytest.fixture(scope="module")
@@ -137,15 +171,30 @@ def _score(conn, cases) -> tuple[int, int]:
 
 
 @needs_corpus
+def test_the_pinned_corpus_is_the_one_the_floors_were_measured_on(pinned):
+    """A smaller corpus is an easier task, so a forgotten baseline memory has
+    to fail here rather than quietly flatter the floors."""
+    _, size, ids = pinned
+    assert size == PINNED_SIZE, (
+        f"the baseline corpus rebuilt to {size} memories, not {PINNED_SIZE}; "
+        "one of them has been forgotten and the floors no longer compare")
+    uncovered = []
+    for question, needle in _holdout().CASES:
+        wanted = needle if isinstance(needle, tuple) else (needle,)
+        if not any(w in i.lower() for i in ids for w in wanted):
+            uncovered.append(question)
+    assert uncovered == [], (
+        "no memory in the baseline corpus answers these, so they measure "
+        f"nothing: {uncovered}")
+
+
+@needs_corpus
 def test_holdout_recall_has_not_regressed(pinned):
     ho = _holdout()
     assert len(ho.CASES) == CASE_COUNT, (
         "the held-out set changed size; the floors above were measured "
         "against 20 cases and no longer mean the same thing")
-    conn, size = pinned
-    assert size == PINNED_SIZE, (
-        f"the pinned slice came out at {size}, not {PINNED_SIZE}; the corpus "
-        "no longer holds enough memories for the floors to compare")
+    conn, _, _ = pinned
     at1, at5 = _score(conn, ho.CASES)
     # Both numbers in both messages. With one assert per floor the second
     # never speaks until the first passes, and @1 sat at 5 against a floor of
@@ -170,7 +219,7 @@ def test_safe_scope_still_returns_something_for_every_question(pinned):
     """Half this corpus is withheld from harnesses not trusted with client
     content, which is inherent to the content. Returning NOTHING at all would
     be a different failure, and is the one worth guarding."""
-    conn, _ = pinned
+    conn, _, _ = pinned
     empty = [q for q, _ in _holdout().CASES
              if not memory.recall(conn, q, k=5, scope="safe")]
     assert empty == [], f"safe scope returned nothing for: {empty}"
