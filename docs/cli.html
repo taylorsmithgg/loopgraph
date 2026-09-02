@@ -188,9 +188,10 @@ carry are the whole vocabulary:</p>
 <p>"never checked" is the one people misread. It does not judge the work. It
 says nobody has run the command yet.</p>
 <p>Below the criteria come any rules that fired, each as a sentence with its rule
-id in brackets so it can be looked up in <a href="design.html">design</a>. Then the last
-four lines, which are the same every time: whether the work is finished, which
-gates are on, this session's key, and the database in use.</p>
+id in brackets so it can be looked up in <a href="design.html">design</a>. Every run then
+ends on the same four lines: whether the work is finished, which gates are on,
+this session's key, and the database in use. Only the first of those four
+changes as the work moves.</p>
 <h2 id="command-surface">Command surface<a class="headerlink" href="#command-surface" title="Permanent link">#</a></h2>
 <div class="codehilite"><pre><span></span><code>loopgraph on|off [--only scope|loop]     # both gates by default
 loopgraph status                         # criteria + gate state

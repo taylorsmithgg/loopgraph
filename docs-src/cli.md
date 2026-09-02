@@ -79,9 +79,10 @@ carry are the whole vocabulary:
 says nobody has run the command yet.
 
 Below the criteria come any rules that fired, each as a sentence with its rule
-id in brackets so it can be looked up in [design](design.html). Then the last
-four lines, which are the same every time: whether the work is finished, which
-gates are on, this session's key, and the database in use.
+id in brackets so it can be looked up in [design](design.html). Every run then
+ends on the same four lines: whether the work is finished, which gates are on,
+this session's key, and the database in use. Only the first of those four
+changes as the work moves.
 
 
 ## Command surface
