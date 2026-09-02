@@ -173,8 +173,9 @@ def _mem(args) -> int:
             # decision at that moment: the memory is stored either way and the
             # scope rule already applies. Security findings are worth one
             # deliberate pass, not a running commentary -- `loopgraph security`.
+            from .security import MEMORY_WITHHELD as _WITHHELD
             from .security import queue as _sec_queue
-            _sec_queue("memory withheld at safe scope", mid, "; ".join(why))
+            _sec_queue(_WITHHELD, mid, "; ".join(why))
         print(mid)
         return 0
 
@@ -204,9 +205,32 @@ def _mem(args) -> int:
         return 0
 
     if args.mem_cmd == "forget":
+        # Two stores, so three outcomes, and the old code collapsed them into
+        # one: it removed the file, ignored whether that had done anything,
+        # then reported only on the node. Forgetting a memory whose node was
+        # already gone deleted the markdown and still exited 2 "no such
+        # memory" -- which reads as "nothing was touched" while a file has in
+        # fact just been deleted. Only an id absent from BOTH stores is
+        # unknown; an id in one of them is a divergence being repaired, and
+        # saying which store held it is the difference between a scary
+        # message and a diagnosis.
+        from . import security as _sec
+        missing, repaired = [], []
         for i in args.id:
-            memory.remove_markdown(args.corpus, i)
-        missing = [i for i in args.id if not memory.forget(conn, i)]
+            had_file = memory.remove_markdown(args.corpus, i)
+            had_node = memory.forget(conn, i)
+            if not (had_file or had_node):
+                missing.append(i)
+                continue
+            # The finding outlives the memory otherwise. The queue is
+            # append-only and knows nothing about deletion, so a forgotten
+            # memory left a row naming an id that exists in neither store.
+            _sec.retract(i)
+            if had_file != had_node:
+                repaired.append((i, "the index" if had_node else "the corpus"))
+        for i, where in repaired:
+            print(f"mem forget: {i} was only in {where} -- the other store had "
+                  "already lost it, now consistent", file=sys.stderr)
         if missing:
             print(f"mem forget: no such memory: {', '.join(missing)}",
                   file=sys.stderr)
@@ -512,6 +536,8 @@ def main(argv: list[str] | None = None) -> int:
     sec = sub.add_parser("security")
     sec.add_argument("--clear", action="store_true",
                      help="mark everything reviewed (after the review pass)")
+    sec.add_argument("--prune", action="store_true",
+                     help="retract findings about memories that no longer exist")
     sec.add_argument("--json", action="store_true")
 
     ds = sub.add_parser("distill")
@@ -556,6 +582,29 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "security":
         from . import security as _sec
+        if args.prune:
+            # Only findings that name a memory, and only where the memory is
+            # gone from the index. The queue carries hand-filed findings too,
+            # whose subject is an account or a host and never was a memory
+            # id -- an open account compromise was sitting two rows below
+            # three of these stale ones, so pruning by "subject not found"
+            # alone would have retracted it.
+            # `conn` above is the per-repo criteria graph, not this. Resolving
+            # memory ids against it would find none of them and retract the
+            # whole queue.
+            mconn = memory.open_memory(os.environ.get("LOOPGRAPH_MEMORY_DB"))
+            live = {r["id"] for r in mconn.execute(
+                "SELECT id FROM nodes WHERE type='memory'")}
+            stale = sorted({r["subject"] for r in _sec.pending()
+                            if r.get("kind") == _sec.MEMORY_WITHHELD
+                            and r.get("subject") not in live})
+            for s in stale:
+                _sec.retract(s)
+            print(f"security: retracted {len(stale)} finding(s) about "
+                  "forgotten memories")
+            for s in stale:
+                print(f"  {s}")
+            return 0
         if args.clear:
             n = _sec.clear()
             print(f"security: {n} item(s) marked reviewed")

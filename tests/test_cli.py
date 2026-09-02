@@ -1,4 +1,5 @@
 import json
+import os
 import pytest
 from loopgraph.cli import main
 from loopgraph.db import open_db
@@ -381,3 +382,101 @@ def test_check_still_carries_the_specification_contract(db):
     run(db, "run")
     assert run(db, "check") == 1
     assert run(db, "add", "C2", "--statement", "s", "--cmd", "true", "--allow-green") == 0
+
+
+# --- mem forget across the two stores ---------------------------------------
+#
+# The corpus is the writer and sqlite is the index over it, so every forget
+# touches two stores and can succeed in one while finding nothing in the
+# other. Reporting only on the index made a partial delete look like a no-op.
+
+@pytest.fixture
+def mem_env(tmp_path, monkeypatch):
+    """Isolate every store `mem` touches.
+
+    `QUEUE` and `REVIEWED` are module constants resolved at import, so
+    setenv is too late for them and a test would append tombstones to the
+    live queue -- the one holding an untriaged account compromise. The
+    memory DB is the other way round, read per call, so setenv works there.
+    """
+    from loopgraph import security
+    monkeypatch.setenv("LOOPGRAPH_MEMORY_DB", str(tmp_path / "mem.db"))
+    monkeypatch.setattr(security, "QUEUE", str(tmp_path / "sec.jsonl"))
+    monkeypatch.setattr(security, "REVIEWED", str(tmp_path / "sec.reviewed"))
+    return str(tmp_path / "corpus")
+
+
+def mem(db, corpus, *args):
+    """`main` resolves and opens the criteria graph before dispatching to
+    `mem`, so without --db every one of these opens a real DB for the cwd."""
+    return main(["--db", db, "mem", "--corpus", corpus, *args])
+
+
+def test_forget_removes_both_stores(db, mem_env, capsys):
+    mem(db, mem_env, "retain", "the edge collector is 32-bit")
+    mid = capsys.readouterr().out.strip()
+    assert mem(db, mem_env, "forget", mid) == 0
+    assert not os.path.exists(os.path.join(mem_env, f"{mid}.md"))
+    assert f"- [{mid}.md]" not in open(
+        os.path.join(mem_env, "MEMORY.md"), encoding="utf-8").read()
+
+
+def test_forget_of_a_file_only_memory_succeeds_and_says_so(db, mem_env, capsys):
+    """The index is disposable, so a file can outlive its node. Deleting that
+    file is work done, and exiting 2 'no such memory' denied it."""
+    from loopgraph.memory import write_markdown
+    write_markdown(mem_env, "orphan-file", "a fact", "world")
+    assert mem(db, mem_env, "forget", "orphan-file") == 0
+    assert "only in the corpus" in capsys.readouterr().err
+
+
+def test_forget_of_an_index_only_memory_succeeds_and_says_so(db, mem_env, capsys):
+    mem(db, mem_env, "retain", "index only", "--no-file")
+    mid = capsys.readouterr().out.strip()
+    assert mem(db, mem_env, "forget", mid) == 0
+    assert "only in the index" in capsys.readouterr().err
+
+
+def test_forget_of_an_unknown_id_still_fails(db, mem_env, capsys):
+    """Absent from both stores is the only real error."""
+    assert mem(db, mem_env, "forget", "never-existed") == 2
+    assert "no such memory" in capsys.readouterr().err
+
+
+def test_forget_retracts_the_finding_it_filed(db, mem_env, capsys):
+    """A sensitive retain queues a finding naming the memory id. Forgetting
+    the memory left that finding pointing at an id in neither store, which
+    reads from the queue side as the two stores having diverged."""
+    from loopgraph import security
+    mem(db, mem_env, "retain", "the api key for the collector lives in vault")
+    mid = capsys.readouterr().out.strip()
+    assert [r["subject"] for r in security.pending()] == [mid]
+    mem(db, mem_env, "forget", mid)
+    assert security.pending() == []
+
+
+def test_prune_retracts_only_findings_whose_memory_is_gone(db, mem_env, capsys):
+    """The queue is a mixed namespace. Hand-filed findings name an account or
+    a host and never were memory ids, so pruning on "subject not in nodes"
+    alone retracts an open account compromise -- one was sitting two rows
+    below three stale memory findings."""
+    from loopgraph import security
+    mem(db, mem_env, "retain", "the api key for the collector lives in vault")
+    live = capsys.readouterr().out.strip()
+    security.queue(security.MEMORY_WITHHELD, "forgotten-long-ago",
+                   "credential material or its location")
+    security.queue("open compromise, untriaged 7d", "someone@example.com",
+                   "needs session revocation")
+
+    assert main(["--db", db, "security", "--prune"]) == 0
+    left = {r["subject"] for r in security.pending()}
+    assert left == {live, "someone@example.com"}
+    assert "forgotten-long-ago" in capsys.readouterr().out
+
+
+def test_prune_on_a_clean_queue_retracts_nothing(db, mem_env, capsys):
+    from loopgraph import security
+    mem(db, mem_env, "retain", "the api key for the collector lives in vault")
+    mid = capsys.readouterr().out.strip()
+    assert main(["--db", db, "security", "--prune"]) == 0
+    assert [r["subject"] for r in security.pending()] == [mid]
