@@ -722,10 +722,11 @@ def recall(
         # The count leaks no content and tells the reader to go and look
         # somewhere trusted.
         out.append({"id": "__withheld__", "text":
-                    f"{withheld} matching memories withheld: they contain "
-                    "client-identifying detail and this harness is running at "
-                    "scope=safe. Recall them from a trusted harness, or "
-                    "`mem recall --scope full` deliberately.",
+                    f"{withheld} more {'memory' if withheld == 1 else 'memories'}"
+                    " matched, but they name a client, a host or a credential, "
+                    "and this tool is not set up to see those. To include them, "
+                    "run the search again with --scope full, or run it from a "
+                    "tool you trust with that detail.",
                     "kind": "model", "tags": [], "source": "", "created_at": "",
                     "score": 0.0, "coverage": 0.0, "matched": [],
                     "superseded_by": None, "withheld": withheld})

@@ -412,10 +412,15 @@ def mem(db, corpus, *args):
     return main(["--db", db, "mem", "--corpus", corpus, *args])
 
 
-def test_forget_removes_both_stores(db, mem_env, capsys):
+def test_forget_confirms_on_stdout(db, mem_env, capsys):
+    """Silence after a delete leaves the reader guessing, and the one message
+    there was went to stderr, which wrappers and CI paint red."""
     mem(db, mem_env, "retain", "the edge collector is 32-bit")
     mid = capsys.readouterr().out.strip()
     assert mem(db, mem_env, "forget", mid) == 0
+    seen = capsys.readouterr()
+    assert seen.out.strip() == f"Forgot {mid}."
+    assert seen.err == ""
     assert not os.path.exists(os.path.join(mem_env, f"{mid}.md"))
     assert f"- [{mid}.md]" not in open(
         os.path.join(mem_env, "MEMORY.md"), encoding="utf-8").read()
@@ -429,14 +434,14 @@ def test_forget_of_a_file_only_memory_succeeds_and_says_so(db, mem_env, capsys):
     from loopgraph.memory import write_markdown
     write_markdown(mem_env, "orphan-file", "a fact", "world")
     assert mem(db, mem_env, "forget", "orphan-file") == 0
-    assert "Its search entry had already been deleted" in capsys.readouterr().err
+    assert "Its search entry had already been deleted" in capsys.readouterr().out
 
 
 def test_forget_of_an_index_only_memory_succeeds_and_says_so(db, mem_env, capsys):
     mem(db, mem_env, "retain", "index only", "--no-file")
     mid = capsys.readouterr().out.strip()
     assert mem(db, mem_env, "forget", mid) == 0
-    assert "Its note file had already been deleted" in capsys.readouterr().err
+    assert "Its note file had already been deleted" in capsys.readouterr().out
 
 
 def test_forget_of_an_unknown_id_still_fails(db, mem_env, capsys):

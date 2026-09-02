@@ -97,10 +97,20 @@ judged.
 One store is reachable from every harness on the machine, and those harnesses
 do not all run the same vendor's model.
 
-So recall is **default-deny**. A memory classified sensitive is withheld unless
-`LOOPGRAPH_MEM_SCOPE=full`, and the withholding is announced — "3 withheld at
-scope=safe" — rather than returned as an empty list that reads like "nothing is
-known."
+So recall hides a sensitive memory by default. Set `LOOPGRAPH_MEM_SCOPE=full`
+to see them. The important part is that a search never pretends the hidden
+ones do not exist. It counts them and says so:
+
+```console
+$ mem recall "who owns that subscription"
+__withheld__  (model)
+  3 more memories matched, but they name a client, a host or a credential,
+  and this tool is not set up to see those. To include them, run the search
+  again with --scope full, or run it from a tool you trust with that detail.
+```
+
+An empty result would read as "nothing is known", which is a different and
+much worse answer.
 
 The shipped classifier knows only patterns that identify anyone's private work:
 IP addresses, emails, AWS ARNs and account ids, credential material, in-cluster

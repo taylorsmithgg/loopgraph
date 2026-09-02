@@ -70,7 +70,7 @@
 <h1 id="cli-and-exit-codes">CLI and exit codes<a class="headerlink" href="#cli-and-exit-codes" title="Permanent link">#</a></h1>
 <h2 id="exit-codes">Exit codes<a class="headerlink" href="#exit-codes" title="Permanent link">#</a></h2>
 <p>There is no single exit-code convention across these subcommands. There are
-three, and confusing them in a script or a hook is a real hazard.</p>
+five, and confusing them in a script or a hook is a real hazard.</p>
 <div class="tablewrap"><table>
 <thead>
 <tr>
@@ -105,14 +105,28 @@ three, and confusing them in a script or a hook is a real hazard.</p>
 <td>there is at least one workable criterion</td>
 <td>—</td>
 </tr>
+<tr>
+<td><code>mem recall</code></td>
+<td>found at least one memory</td>
+<td>found nothing</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>mem forget</code></td>
+<td>deleted it, even if only one half was left to delete</td>
+<td>—</td>
+<td>that name exists in neither the files nor the search index</td>
+</tr>
 </tbody>
 </table></div>
-<p>Read that table twice, because <code>0</code> means three different things in it:</p>
+<p>Read that table twice, because <code>0</code> means four different things in it:</p>
 <ul>
 <li>for <code>check</code> and <code>run</code>, <code>0</code> means "spec met"</li>
 <li>for <code>next</code>, <code>0</code> means the <em>opposite</em> of "there's work"</li>
-<li>for the write commands, <code>0</code> means only "the write went through" — ordinary
-  Unix success, safe to chain with <code>&amp;&amp;</code></li>
+<li>for <code>mem recall</code>, <code>0</code> means "here is what is known" and <code>1</code> means "nothing
+  is known" — the one place a non-zero exit is not a problem</li>
+<li>for the write commands and <code>mem forget</code>, <code>0</code> means only that the work went
+  through: ordinary Unix success, safe to chain with <code>&amp;&amp;</code></li>
 </ul>
 <p>None of these generalises to the others.</p>
 <p>Two cells deserve their own note. <code>run</code> exit 2 covers a bad evidence command or
@@ -168,11 +182,8 @@ loopgraph security --clear                # mark everything listed as reviewed
 loopgraph security --prune                # drop notes about forgotten memories
 </code></pre></div>
 
-<p><code>mem recall</code> is the one exception to reading exit codes as success or failure:
-it exits 1 when it finds nothing, so a script can tell "nothing is known"
-from "here is what is known" without reading the text. <code>mem forget</code> exits 2
-only when the name exists in neither the files nor the search index. Finding
-it in just one is normal, and the command says so and exits 0.</p>
+<p>Both <code>mem recall</code> and <code>mem forget</code> have exit codes that do not read the usual
+way. They are in the table at the top of this page.</p>
 <h2 id="invoking-it">Invoking it<a class="headerlink" href="#invoking-it" title="Permanent link">#</a></h2>
 <p>Three ways, all the same CLI:</p>
 <div class="codehilite"><pre><span></span><code>loopgraph status              # PATH shim -&gt; dist/loopgraph-shim.sh in ~/.local/bin

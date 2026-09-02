@@ -377,7 +377,12 @@ def test_withholding_is_announced_not_silent(tmp_path, monkeypatch):
     conn = open_memory(str(tmp_path / "m.db"))
     retain(conn, PRIVATE, kind="experience")
     notice = recall(conn, "EDGE-LOG-02 nginx cutover")[-1]
-    assert notice["withheld"] == 1 and "scope=safe" in notice["text"]
+    assert notice["withheld"] == 1
+    # The count is the load-bearing part: an empty result reads as "nothing
+    # is known". The text has to say how to see them, without naming a
+    # scope the reader has not met yet.
+    assert "1 more memory matched" in notice["text"]
+    assert "--scope full" in notice["text"]
 
 
 def test_full_scope_returns_it(tmp_path, monkeypatch):

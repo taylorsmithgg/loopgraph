@@ -186,6 +186,13 @@ def _mem(args) -> int:
             print(json.dumps(hits, indent=2))
         else:
             for h in hits:
+                # The withheld notice is a sentence, not a memory. Printed
+                # through the same formatter it came out as
+                # "__withheld__  (model, )" -- an internal name and an empty
+                # date above the one line here that is addressed to a person.
+                if h["id"] == "__withheld__":
+                    print(f"\n{h['text'].strip()}")
+                    continue
                 stale = (f"  [superseded by {h['superseded_by']}]"
                          if h["superseded_by"] else "")
                 print(f"{h['id']}  ({h['kind']}, {h['created_at'][:10]}){stale}\n"
@@ -218,7 +225,7 @@ def _mem(args) -> int:
         # sentence about two stores diverging has been handed our filing
         # system instead of an answer.
         from . import security as _sec
-        missing, repaired = [], []
+        missing = []
         for i in args.id:
             had_file = memory.remove_markdown(args.corpus, i)
             had_node = memory.forget(conn, i)
@@ -229,12 +236,16 @@ def _mem(args) -> int:
             # ever grew, so forgetting a memory left a note naming something
             # that no longer existed anywhere.
             _sec.retract(i)
-            if had_file != had_node:
+            # Confirm every delete, on stdout. Success used to print nothing
+            # at all, which leaves someone who just deleted a memory with no
+            # word that it worked; and the one message there was went to
+            # stderr, so wrappers and CI painted a success red.
+            if had_file and had_node:
+                print(f"Forgot {i}.")
+            else:
                 gone = "note file" if had_node else "search entry"
-                repaired.append((i, gone))
-        for i, gone in repaired:
-            print(f"Forgot {i}. Its {gone} had already been deleted, so only "
-                  "the other half needed clearing up.", file=sys.stderr)
+                print(f"Forgot {i}. Its {gone} had already been deleted, so "
+                      "only the other half needed clearing up.")
         if missing:
             print(f"There is no memory called {', '.join(missing)}. "
                   "Search for the right name with: mem recall \"<a few words>\"",
@@ -263,8 +274,12 @@ def _mem(args) -> int:
             when = seen.get(h)
             print(f"  {h:<14} " + (f"last looked something up on {when[:10]}"
                                    if when else "has never looked anything up"))
-        print(f"\nSensitive memories here: "
-              f"{'shown' if memory.scope_default() == 'full' else 'hidden'}")
+        if memory.scope_default() == "full":
+            print("\nSensitive memories: shown, because LOOPGRAPH_MEM_SCOPE "
+                  "is set to full.")
+        else:
+            print("\nSensitive memories: hidden. Set LOOPGRAPH_MEM_SCOPE=full "
+                  "to include them.")
         print(f"Memory files: {args.corpus}")
         missing = sorted(known - set(seen))
         if missing:
@@ -611,8 +626,11 @@ def main(argv: list[str] | None = None) -> int:
             for s in stale:
                 _sec.retract(s)
             if not stale:
-                print("Nothing to clear up. Every security note still refers "
-                      "to a memory that exists.")
+                # Only says what prune actually looked at. "Every security
+                # note still refers to a memory" was false on any queue
+                # holding hand-filed notes, which never referred to one.
+                print("Nothing to clear up. No security note points at a "
+                      "memory you have forgotten.")
                 return 0
             noun = "note" if len(stale) == 1 else "notes"
             print(f"Cleared {len(stale)} security {noun} about memories you "

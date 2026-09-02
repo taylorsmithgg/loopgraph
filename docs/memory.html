@@ -138,10 +138,18 @@ judged.</p>
 <h2 id="recall-scope">Recall scope<a class="headerlink" href="#recall-scope" title="Permanent link">#</a></h2>
 <p>One store is reachable from every harness on the machine, and those harnesses
 do not all run the same vendor's model.</p>
-<p>So recall is <strong>default-deny</strong>. A memory classified sensitive is withheld unless
-<code>LOOPGRAPH_MEM_SCOPE=full</code>, and the withholding is announced — "3 withheld at
-scope=safe" — rather than returned as an empty list that reads like "nothing is
-known."</p>
+<p>So recall hides a sensitive memory by default. Set <code>LOOPGRAPH_MEM_SCOPE=full</code>
+to see them. The important part is that a search never pretends the hidden
+ones do not exist. It counts them and says so:</p>
+<div class="codehilite"><pre><span></span><code><span class="gp">$ </span>mem<span class="w"> </span>recall<span class="w"> </span><span class="s2">&quot;who owns that subscription&quot;</span>
+<span class="go">__withheld__  (model)</span>
+<span class="go">  3 more memories matched, but they name a client, a host or a credential,</span>
+<span class="go">  and this tool is not set up to see those. To include them, run the search</span>
+<span class="go">  again with --scope full, or run it from a tool you trust with that detail.</span>
+</code></pre></div>
+
+<p>An empty result would read as "nothing is known", which is a different and
+much worse answer.</p>
 <p>The shipped classifier knows only patterns that identify anyone's private work:
 IP addresses, emails, AWS ARNs and account ids, credential material, in-cluster
 DNS, private URLs.</p>

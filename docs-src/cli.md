@@ -8,7 +8,7 @@ description: Three separate exit-code contracts, the command surface, and the th
 ## Exit codes
 
 There is no single exit-code convention across these subcommands. There are
-three, and confusing them in a script or a hook is a real hazard.
+five, and confusing them in a script or a hook is a real hazard.
 
 | Subcommand | Exit 0 | Exit 1 | Exit 2 |
 |---|---|---|---|
@@ -16,13 +16,17 @@ three, and confusing them in a script or a hook is a real hazard.
 | `run` | specification met after this run | not met yet, but every targeted criterion was at least evaluated | at least one criterion **could not be evaluated at all** |
 | `add`, `link`, `tick`, `spend` | the write went through | — | the write was rejected |
 | `next` | there is **nothing** workable right now | there is at least one workable criterion | — |
+| `mem recall` | found at least one memory | found nothing | — |
+| `mem forget` | deleted it, even if only one half was left to delete | — | that name exists in neither the files nor the search index |
 
-Read that table twice, because `0` means three different things in it:
+Read that table twice, because `0` means four different things in it:
 
 - for `check` and `run`, `0` means "spec met"
 - for `next`, `0` means the *opposite* of "there's work"
-- for the write commands, `0` means only "the write went through" — ordinary
-  Unix success, safe to chain with `&&`
+- for `mem recall`, `0` means "here is what is known" and `1` means "nothing
+  is known" — the one place a non-zero exit is not a problem
+- for the write commands and `mem forget`, `0` means only that the work went
+  through: ordinary Unix success, safe to chain with `&&`
 
 None of these generalises to the others.
 
@@ -89,11 +93,8 @@ loopgraph security --clear                # mark everything listed as reviewed
 loopgraph security --prune                # drop notes about forgotten memories
 ```
 
-`mem recall` is the one exception to reading exit codes as success or failure:
-it exits 1 when it finds nothing, so a script can tell "nothing is known"
-from "here is what is known" without reading the text. `mem forget` exits 2
-only when the name exists in neither the files nor the search index. Finding
-it in just one is normal, and the command says so and exits 0.
+Both `mem recall` and `mem forget` have exit codes that do not read the usual
+way. They are in the table at the top of this page.
 
 ## Invoking it
 
