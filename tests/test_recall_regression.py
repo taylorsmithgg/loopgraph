@@ -32,21 +32,20 @@ from loopgraph import memory
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# The corpus every measurement below runs against: the memories that existed
-# on the day the floors were recorded, selected by their own created_at.
+# The corpus every measurement below runs against: every memory created on or
+# before the day the floors were recorded. One predicate, nothing else -- no
+# sampling and no separate union of the target memories, because on this
+# machine the cut already lands on exactly the original corpus. 214 memories,
+# all 29 rows the twenty cases target, 185 distractors. So this is not a
+# sample of what the floors were measured against, it is that corpus.
 #
-# A stable hash over a growing population is not stable. Sorting every
-# non-target memory by sha1 of its id and truncating still lets a newly
-# retained memory whose hash sorts early enter the slice and evict one, so
-# the composition churns as the corpus grows and the floors drift again on a
-# longer period. Cutting on the date removes growth from the selection
-# entirely: nothing retained after the baseline can enter, so the slice
-# changes only when a memory inside it is forgotten, and then the size assert
-# below fails loudly rather than the denominator changing in silence.
-#
-# On this machine the cut lands on exactly the original corpus -- 214
-# memories, all 29 rows the twenty cases target, 185 distractors -- so this
-# is not a sample of that corpus, it is that corpus.
+# An earlier version sampled by a stable hash of the id, which is not stable
+# over a growing population: a newly retained memory whose hash sorted early
+# entered the set and evicted one, so the composition churned as the corpus
+# grew and the floors drifted again on a longer period. The date cut removes
+# growth from the selection instead of slowing it down. The set now changes
+# only when a memory inside it is forgotten, and then the size assert fails
+# loudly rather than the denominator changing in silence.
 BASELINE_DATE = "2026-08-17"
 PINNED_SIZE = 214
 
@@ -92,34 +91,44 @@ needs_corpus = pytest.mark.skipif(
 def _cache_key(rows: list[tuple]) -> str:
     """What the built database is a function of.
 
-    The corpus contents, and the module that ranks them. Keying on the corpus
-    alone would let a cached index built by the previous autolink survive a
-    change to autolink, and autolink is part of what these floors measure --
-    @1 went 9 to 10 by removing links. A stale hit would report the old code's
-    number as the new code's.
+    The corpus contents, and every module in the package. Keying on the
+    corpus alone would let a cached index built by the previous autolink
+    survive a change to autolink, and autolink is part of what these floors
+    measure -- @1 went 9 to 10 by removing links. A stale hit would report
+    the old code's number as the new code's.
+
+    Every module rather than memory.py alone: autolink reaches `link` in
+    graph.py and the delta and meta writes in db.py, so a mutual or degree
+    cap changed there would build a different graph behind an unchanged key.
+    Hashing the whole package costs a few milliseconds and needs no judgement
+    about which file the ranking really depends on.
     """
     h = hashlib.sha256(BASELINE_DATE.encode())
     for mid, statement, created, kind, tags in rows:
         h.update(f"\0{mid}\0{statement}\0{created}\0{kind}\0{tags}".encode())
-    h.update(open(memory.__file__, "rb").read())
+    pkg = os.path.dirname(memory.__file__)
+    for name in sorted(os.listdir(pkg)):
+        if name.endswith(".py"):
+            h.update(open(os.path.join(pkg, name), "rb").read())
     return h.hexdigest()[:16]
 
 
 def _pinned_corpus():
     """The baseline corpus, rebuilt in a scratch database.
 
-    Selection is by `created_at`, so growth cannot touch it: a memory
-    retained after the baseline never enters, and the set changes only when
-    one inside it is forgotten. Returns the connection, its size, and the ids
-    present, so callers can fail on a shortfall rather than measure a quietly
-    different denominator.
+    Selection is one predicate -- created_at on or before the baseline -- so
+    growth cannot touch it: a memory retained afterwards never enters, and
+    the set changes only when one inside it is forgotten. Returns the
+    connection, its size and the ids present, so callers can fail on a
+    shortfall rather than measure a quietly different denominator.
 
-    Building it costs about forty-five seconds -- 214 retains, each
-    autolinking against the rows already inserted, and inserting in date
-    order puts topically related memories next to each other, which is the
-    expensive case for the mutual-link check. So the result is cached under
-    the key above and reused until either the corpus or the ranking module
-    changes.
+    Building it costs about forty seconds, from 214 retains each autolinking
+    against the rows already inserted. Insertion order is not the reason:
+    date order and hash order build 101 and 104 edges and score identically
+    at @1 10, @5 16, so the floors do not depend on it. The cost is the
+    contents -- these memories are topically denser than a sample drawn
+    across the whole corpus, so more link candidates survive the mutual
+    check. Cached under the key above either way.
     """
     live = memory.open_memory()
     rows = []
@@ -173,11 +182,25 @@ def _score(conn, cases) -> tuple[int, int]:
 @needs_corpus
 def test_the_pinned_corpus_is_the_one_the_floors_were_measured_on(pinned):
     """A smaller corpus is an easier task, so a forgotten baseline memory has
-    to fail here rather than quietly flatter the floors."""
+    to fail here rather than quietly flatter the floors.
+
+    Exact equality, not a floor, and that is a decision with a cost: one
+    `mem forget` of a pre-baseline memory reds this until someone updates
+    PINNED_SIZE and re-measures. A floor would let the corpus shrink quietly
+    instead, and a shrinking distractor pool makes every case easier, so the
+    floors would keep passing while meaning less each time -- which is the
+    drift this whole file was rewritten to stop. Rare event, loud failure,
+    and the message says what to do.
+    """
     _, size, ids = pinned
     assert size == PINNED_SIZE, (
-        f"the baseline corpus rebuilt to {size} memories, not {PINNED_SIZE}; "
-        "one of them has been forgotten and the floors no longer compare")
+        f"the baseline corpus rebuilt to {size} memories, not {PINNED_SIZE}. "
+        "A pre-baseline memory has been forgotten, so the floors below no "
+        f"longer compare with the recorded ones. Set PINNED_SIZE to {size}, "
+        "re-measure both floors on the new corpus, and record the reading "
+        "and the date next to them -- a smaller corpus is an easier task, so "
+        "the new numbers are not comparable with the old and must not be "
+        "copied across.")
     uncovered = []
     for question, needle in _holdout().CASES:
         wanted = needle if isinstance(needle, tuple) else (needle,)
