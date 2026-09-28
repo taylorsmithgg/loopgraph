@@ -466,7 +466,7 @@ def test_forget_retracts_the_finding_it_filed(db, mem_env, capsys):
     the memory left that finding pointing at an id in neither store, which
     reads from the queue side as the two stores having diverged."""
     from loopgraph import security
-    mem(db, mem_env, "retain", "the api key for the collector lives in vault")
+    mem(db, mem_env, "retain", "the collector runs with api_key: 7d2f9ab4c1e05f63")
     mid = capsys.readouterr().out.strip()
     assert [r["subject"] for r in security.pending()] == [mid]
     mem(db, mem_env, "forget", mid)
@@ -479,10 +479,10 @@ def test_prune_retracts_only_findings_whose_memory_is_gone(db, mem_env, capsys):
     alone retracts an open account compromise -- one was sitting two rows
     below three stale memory findings."""
     from loopgraph import security
-    mem(db, mem_env, "retain", "the api key for the collector lives in vault")
+    mem(db, mem_env, "retain", "the collector runs with api_key: 7d2f9ab4c1e05f63")
     live = capsys.readouterr().out.strip()
     security.queue(security.MEMORY_WITHHELD, "forgotten-long-ago",
-                   "credential material or its location")
+                   "credential material")
     security.queue("open compromise, untriaged 7d", "someone@example.com",
                    "needs session revocation")
 
@@ -494,7 +494,7 @@ def test_prune_retracts_only_findings_whose_memory_is_gone(db, mem_env, capsys):
 
 def test_prune_on_a_clean_queue_retracts_nothing(db, mem_env, capsys):
     from loopgraph import security
-    mem(db, mem_env, "retain", "the api key for the collector lives in vault")
+    mem(db, mem_env, "retain", "the collector runs with api_key: 7d2f9ab4c1e05f63")
     mid = capsys.readouterr().out.strip()
     assert main(["--db", db, "security", "--prune"]) == 0
     assert [r["subject"] for r in security.pending()] == [mid]

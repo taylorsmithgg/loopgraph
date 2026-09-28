@@ -259,27 +259,61 @@ def test_filler_words_do_not_manufacture_coverage(mem):
 PRIVATE = ("EDGE-LOG-01 was cut over to EDGE-LOG-02 on the same IP 192.0.2.10 "
            "and nginx never started")
 GENERIC = "porter stemming in FTS5 reaches inflected words like logger/loggers"
+CREDENTIAL = 'the nginx box came up after password = hunter2Forever99'
 
 
-def test_private_detail_is_classified_sensitive():
+def test_a_credential_value_is_classified_sensitive():
     from loopgraph.memory import sensitivity
-    assert sensitivity(PRIVATE) == ["an IP address"]
+    assert sensitivity(CREDENTIAL) == ["credential material"]
     assert sensitivity(GENERIC) == []
 
 
+def test_an_identifier_is_labelled_but_not_withheld():
+    """Almost every memory names a client, because almost every engagement
+    does. Withholding those hid the template the work shares."""
+    from loopgraph.memory import identifies, sensitivity
+    assert sensitivity(PRIVATE) == []
+    assert identifies(PRIVATE) == ["an IP address"]
+
+
 @pytest.mark.parametrize("text,expected", [
-    ("the key is at /home/deploy/openvpn/easy-rsa/pki", True),
-    ("arn:aws:iam::123456789012:role/Thing", True),
-    ("email someone@example.com about it", True),
-    ("account 123456789012 owns the bucket", True),
-    ("otel-collector.telemetry.svc.cluster.local:4317", True),
-    ("the exhibit package for a large-medical client RFP pursuit", True),
+    # A value leaks. Every one of these carries the secret itself.
+    ("api_key: 9f2c41ab77de40b1", True),
+    ("-----BEGIN RSA PRIVATE KEY-----", True),
+    ("the access key is AKIAIOSFODNN7EXAMPLE", True),
+    ("ghp_abcdefghijklmnopqrstuvwxyz0123456789", True),
+    # A reference names where a secret lives, and the operator says this all
+    # day. It stays in recall.
+    ("the key is at /home/deploy/openvpn/easy-rsa/pki", False),
+    ("the api_key lives in the worker secret", False),
+    ("rotate the token before Friday", False),
+    ("api_key: <redacted>", False),
+    ("arn:aws:iam::123456789012:role/Thing", False),
+    ("email someone@example.com about it", False),
+    ("account 123456789012 owns the bucket", False),
+    ("otel-collector.telemetry.svc.cluster.local:4317", False),
+    ("the exhibit package for a large-medical client RFP pursuit", False),
     ("use uv run pytest -q to run the suite", False),
     ("BM25 is negative-is-better in SQLite", False),
 ])
 def test_sensitivity_classifier(text, expected):
     from loopgraph.memory import sensitivity
     assert bool(sensitivity(text)) is expected
+
+
+@pytest.mark.parametrize("text", [
+    "the logger host is 10.24.30.73",
+    "arn:aws:s3:us-east-2:198901727629:bucket/x",
+    "account 198901727629 owns it",
+    "john.fitch@cross-check.com approved it",
+    "https://portal.someclient.com/admin is the console",
+    "chi-mss.mss.svc.cluster.local resolves internally",
+    "kubectl -n mss get pods",
+    "the exhibit package for a large-medical client RFP pursuit",
+])
+def test_an_identifier_still_carries_a_label(text):
+    from loopgraph.memory import identifies
+    assert identifies(text), f"unlabelled: {text!r}"
 
 
 # --- operator terms ----------------------------------------------------------
@@ -295,33 +329,35 @@ def _write_config(tmp_path, monkeypatch, body: str) -> str:
 
 
 def test_operator_terms_are_matched(tmp_path, monkeypatch):
-    from loopgraph.memory import sensitivity
+    from loopgraph.memory import identifies, sensitivity
     _write_config(tmp_path, monkeypatch,
                   'terms = ["orion", "acme-console"]\n'
                   'terms_why = "an internal system or client name"\n')
-    assert sensitivity("Orion rescheduled the worker pods") == [
+    assert identifies("Orion rescheduled the worker pods") == [
         "an internal system or client name"]
-    assert sensitivity("the acme-console ingress is not managed") == [
+    assert identifies("the acme-console ingress is not managed") == [
         "an internal system or client name"]
+    # A client name labels the memory. It never withholds it.
+    assert sensitivity("Orion rescheduled the worker pods") == []
 
 
 def test_operator_terms_do_not_fire_inside_longer_words(tmp_path, monkeypatch):
     """A term list is only usable if it is quiet. `orion` must not match
-    `orionesque`, and must not turn every document into a withheld one."""
-    from loopgraph.memory import sensitivity
+    `orionesque`, and must not label every document."""
+    from loopgraph.memory import identifies
     _write_config(tmp_path, monkeypatch, 'terms = ["orion", "sms"]\n')
-    assert sensitivity("orionesque naming is a bad habit") == []
-    assert sensitivity("the transmission was fine") == []
+    assert identifies("orionesque naming is a bad habit") == []
+    assert identifies("the transmission was fine") == []
 
 
 def test_operator_regex_patterns(tmp_path, monkeypatch):
-    from loopgraph.memory import sensitivity
+    from loopgraph.memory import identifies
     _write_config(tmp_path, monkeypatch,
                   "[[pattern]]\n"
                   "regex = '\\b(?:ACME|GLBX)[-_][A-Z0-9-]{2,}\\b'\n"
                   'why = "a client host or tenant code"\n')
-    assert sensitivity("ACME-LOG-01 went down") == ["a client host or tenant code"]
-    assert sensitivity("the log host went down") == []
+    assert identifies("ACME-LOG-01 went down") == ["a client host or tenant code"]
+    assert identifies("the log host went down") == []
 
 
 def test_no_config_means_no_operator_terms(tmp_path, monkeypatch):
@@ -343,40 +379,48 @@ def test_a_broken_config_is_announced_not_silently_ignored(tmp_path, monkeypatch
 
 
 def test_an_invalid_regex_is_skipped_and_the_rest_survive(tmp_path, monkeypatch, capsys):
-    from loopgraph.memory import load_sensitive_patterns, sensitivity
+    from loopgraph.memory import identifies, load_sensitive_patterns
     _write_config(tmp_path, monkeypatch,
                   "[[pattern]]\nregex = '([unclosed'\nwhy = \"broken\"\n\n"
                   "[[pattern]]\nregex = '\\bORION\\b'\nwhy = \"good one\"\n")
     assert [why for _, why in load_sensitive_patterns()] == ["good one"]
     assert "not a valid regex" in capsys.readouterr().err
-    assert sensitivity("ORION is down") == ["good one"]
+    assert identifies("ORION is down") == ["good one"]
 
 
 def test_editing_the_config_takes_effect_without_a_restart(tmp_path, monkeypatch):
     """Harnesses are long-lived; a cached pattern list would mean a term
     added after a leak scare does not apply until the next reboot."""
-    from loopgraph.memory import sensitivity
+    from loopgraph.memory import identifies
     p = _write_config(tmp_path, monkeypatch, 'terms = ["orion"]\n')
-    assert sensitivity("vega is fine") == []
+    assert identifies("vega is fine") == []
     with open(p, "w") as fh:
         fh.write('terms = ["orion", "vega"]\n')
-    assert sensitivity("vega is fine") != []
+    assert identifies("vega is fine") != []
 
 
-def test_safe_scope_withholds_private_detail(tmp_path, monkeypatch):
+def test_safe_scope_withholds_a_credential(tmp_path, monkeypatch):
     monkeypatch.setenv("LOOPGRAPH_MEM_SCOPE", "safe")
     conn = open_memory(str(tmp_path / "m.db"))
-    retain(conn, PRIVATE, kind="experience")
-    hits = recall(conn, "EDGE-LOG-02 nginx cutover")
+    retain(conn, CREDENTIAL, kind="experience")
+    hits = recall(conn, "vault nginx password")
     assert [h["id"] for h in hits] == ["__withheld__"]
+
+
+def test_safe_scope_returns_a_memory_that_names_a_client(tmp_path, monkeypatch):
+    """The template is the reusable part, and the client name carries it."""
+    monkeypatch.setenv("LOOPGRAPH_MEM_SCOPE", "safe")
+    conn = open_memory(str(tmp_path / "m.db"))
+    mid = retain(conn, PRIVATE, kind="experience")
+    assert recall(conn, "EDGE-LOG-02 nginx cutover")[0]["id"] == mid
 
 
 def test_withholding_is_announced_not_silent(tmp_path, monkeypatch):
     """Silently returning nothing would tell the reader nothing is known."""
     monkeypatch.setenv("LOOPGRAPH_MEM_SCOPE", "safe")
     conn = open_memory(str(tmp_path / "m.db"))
-    retain(conn, PRIVATE, kind="experience")
-    notice = recall(conn, "EDGE-LOG-02 nginx cutover")[-1]
+    retain(conn, CREDENTIAL, kind="experience")
+    notice = recall(conn, "vault nginx password")[-1]
     assert notice["withheld"] == 1
     # The count is the load-bearing part: an empty result reads as "nothing
     # is known". The text has to say how to see them, without naming a
@@ -422,7 +466,7 @@ def test_retain_writes_a_file_and_indexes_it(tmp_path):
 def test_the_file_marks_sensitivity_for_a_human_reader(tmp_path):
     from loopgraph.memory import write_markdown
     d = tmp_path / "corpus"
-    write_markdown(str(d), "m", PRIVATE, "experience")
+    write_markdown(str(d), "m", CREDENTIAL, "experience")
     assert "sensitive: true" in (d / "m.md").read_text()
 
 
@@ -513,11 +557,13 @@ def test_the_index_is_disposable_and_rebuilds_from_the_files(tmp_path, monkeypat
     ("never run parallel agents' git work in a shared checkout", False, ""),
     ("AWS SSO sessions expire mid-work; log in before a long task", False, ""),
 ])
-def test_private_work_is_sensitive_and_tooling_knowledge_is_not(
+def test_private_work_is_labelled_and_tooling_knowledge_is_not(
         text, expected, why, tmp_path, monkeypatch):
-    from loopgraph.memory import sensitivity
+    from loopgraph.memory import identifies, sensitivity
     _write_config(tmp_path, monkeypatch, 'terms = ["orion", "acme-console"]\n')
-    assert bool(sensitivity(text)) is expected, f"{text!r} ({why})"
+    assert bool(identifies(text)) is expected, f"{text!r} ({why})"
+    # None of these is a credential, so none of them is withheld.
+    assert sensitivity(text) == []
 
 
 def test_the_classifier_does_not_fire_on_ordinary_acronyms():
@@ -628,17 +674,18 @@ def test_a_conclusion_on_the_theme_still_silences_it(mem):
     assert reflect(mem) == []
 
 
-# `token` means two things and only one of them is private. Getting this wrong
-# withheld a memory about token accounting as though it held a credential.
+# `token` means two things and neither of them withholds a memory on its own.
+# A reference to a credential names where a secret is, and the operator says
+# these sentences all day. Only a value gates recall.
 @pytest.mark.parametrize("text", [
     "the refresh token is stored in SSM under /mss/soc/key",
     "bearer token in the Authorization header",
     "rotate the token before Friday",
     "token_url points at the gov endpoint",
 ])
-def test_credential_token_still_classifies(text):
+def test_a_credential_reference_is_not_withheld(text):
     from loopgraph.memory import sensitivity
-    assert "credential material or its location" in sensitivity(text)
+    assert sensitivity(text) == [], text
 
 
 @pytest.mark.parametrize("text", [
@@ -728,14 +775,15 @@ def test_aliases_only_add_candidates_never_displace_a_literal(tmp_path):
     "arn:aws:s3:us-east-2:198901727629:bucket/x",
     "account 198901727629 owns it",
     "john.fitch@cross-check.com approved it",
-    "the refresh token is stored in SSM",
+    "the refresh token value is bearer: 8f21c0aa4d9b7e6152",
     "https://portal.someclient.com/admin is the console",
     "chi-mss.mss.svc.cluster.local resolves internally",
     "kubectl -n mss get pods",
 ])
 def test_still_classified_after_narrowing(text):
-    from loopgraph.memory import sensitivity
-    assert sensitivity(text), f"LEAK: {text!r} no longer classifies"
+    from loopgraph.memory import identifies, sensitivity
+    assert (identifies(text) or sensitivity(text)), (
+        f"LEAK: {text!r} no longer classifies")
 
 
 @pytest.mark.parametrize("text", [

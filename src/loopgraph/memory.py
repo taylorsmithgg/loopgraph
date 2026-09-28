@@ -81,52 +81,74 @@ KIND_TO_TYPE = {"world": "reference", "experience": "project", "model": "feedbac
 # Default-deny: `safe` unless a harness is explicitly trusted with `full`.
 SCOPES = ("safe", "full")
 
-# Patterns that identify *anyone's* private work. These ship with the tool.
+# Two classes of pattern, with two different consequences.
 #
-# What they deliberately do not contain is the thing that actually makes an
-# operational note identifying: the names of your employer, your clients, your
-# clusters. Those are yours, they differ per operator, and a list of them
-# committed to a public repository is itself the leak it was written to
-# prevent. Put them in `~/.loopgraph/sensitive.toml` -- see
-# `load_sensitive_patterns` -- where they stay on your machine.
-# `token` is a homonym, and the two senses are not equally private: a bearer
-# credential, and the unit model cost is measured in. Folding them together
-# filed a memory about output-token accounting as credential material and
-# withheld it from every safe-scope harness -- on an operator whose work is
-# largely token accounting, that quietly hides a whole subject rather than a
-# secret. The measured senses are excluded by name; every other use of the
-# word still classifies, so "refresh token", "bearer token" and a bare token
-# in a note about where it lives are all still caught. Dropping the trailing
-# \w* also drops "tokenizer" and "tokenization", which are never credentials.
-_TOKEN_MEASURE_WORDS = ("output", "input", "context", "cache", "prompt",
-                        "completion", "cached", "uncached")
-_TOKEN_PATTERN = (
-    "(?i)"
-    # one fixed-width lookbehind each: Python will not take an alternation of
-    # differing widths in a single one.
-    + "".join(rf"(?<!{w} )" for w in _TOKEN_MEASURE_WORDS)
-    # A count is never a credential. "123 tokens", "~50k tokens", "2M tokens":
-    # the qualifier form was covered first and this bare one was not, so a
-    # memory saying "the brief costs ~123 tokens" was still filed as
-    # credential material. Two chars of fixed-width lookbehind is enough --
-    # only the digit or magnitude suffix immediately before the space matters.
-    + r"(?<![\dkKmMbB] )"
-    # Ordered alternation: "tokens" / a bare "token" / "token_url", but never
-    # "tokenizer" -- no word boundary after "token" there, and "i" is not a
-    # separator, so every branch correctly fails.
-    + r"\btoken(?:s\b|\b|[-_]\w+)"
-    + r"(?!\s*(?:/|per\b|count\b|budget\b|spent\b|remaining\b))"
+# CREDENTIAL_PATTERNS gate recall. A password, an API key or a bearer token is
+# the one thing that must never reach a harness the operator does not trust,
+# and it is also the one thing that should never have been written down.
+#
+# IDENTITY_PATTERNS only label. A client name, a host, an account id or an
+# internal URL identifies somebody, but almost every memory in this corpus
+# names a client, because almost every engagement does. Measured 2026-09-28:
+# 292 of 884 memories classified sensitive, and 99 of those matched an
+# identity pattern and nothing else. Withholding them hid the shared template
+# behind the client -- the pattern is the reusable part, and it is the part
+# recall exists to find. The label is still recorded, so a harness can see
+# what a memory names without losing the memory.
+#
+# Operator terms in `~/.loopgraph/sensitive.toml` are identity, not
+# credentials: they are the names of clients and internal systems. They label
+# and no longer withhold. See `load_sensitive_patterns`.
+# A reference to a credential is not a credential. "Rotate the token before
+# Friday", "the password lives in 1Password" and "put the API key in the
+# worker secret" all name where a secret is, and the operator works with
+# those sentences all day. A value is the leak: an assignment that carries
+# the secret itself, a key block, or a vendor key id. The word alone no
+# longer withholds anything.
+#
+# `token` is also a homonym. The unit that model cost is measured in shares
+# the word with a bearer credential, and folding the two together filed a
+# note about output-token accounting as credential material.
+
+# A placeholder is the ordinary way to write an example, so an assignment to
+# one names no secret.
+_PLACEHOLDER = (r"(?:x{3,}|\*{3,}|\.{3,}|<[^>]*>|\$\{?\w+\}?|%\w+%|"
+                r"redacted|REDACTED|changeme|CHANGEME|null|none|empty|unset|"
+                r"true|false|\d+)")
+
+# An assignment that carries a value of credential length. Eight characters
+# is the shortest password any of these systems accepts, and the value must
+# not be a placeholder or a path.
+_ASSIGNED_SECRET = (
+    r"(?i)\b(?:password|passwd|secret|api[-_ ]?key|access[-_ ]?key|"
+    r"auth[-_ ]?token|bearer|private[-_ ]?key)\b"
+    r"\s*(?:=|:)\s*"
+    r"(?!" + _PLACEHOLDER + r"(?:[\s,;.]|$)|/)"
+    r"[^\s\"']{8,}"
 )
 
-# Measured 2026-08-17: 101 of 214 memories classified sensitive, and held-out
-# recall@5 at scope=safe was HALF what it was at full (8/20 vs 15/20). Every
-# harness that is not trusted with client content therefore lost about half
-# the corpus. Over-classifying is the right default, but these five were
-# matching things that identify nobody -- a version number read as an IP, a
-# public vendor endpoint read as an internal one -- and each one costs real
-# recall in every other harness. Narrowed with the leak direction, not the
-# convenience direction, in mind.
-GENERIC_PATTERNS: list[tuple[str, str]] = [
+# Credential material. This class, and only this class, withholds a memory at
+# safe scope. Every pattern matches a value, never a mention.
+CREDENTIAL_PATTERNS: list[tuple[str, str]] = [
+    (_ASSIGNED_SECRET, "credential material"),
+    # A key block is the key itself.
+    (r"-----BEGIN [A-Z ]*PRIVATE KEY-----", "credential material"),
+    # Vendor key ids, in the shapes their own scanners publish.
+    (r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b", "credential material"),
+    (r"\b(?:gh[pousr]_[A-Za-z0-9]{36,}|xox[abprs]-[A-Za-z0-9-]{10,}|"
+     r"sk-[A-Za-z0-9]{32,}|glpat-[A-Za-z0-9_-]{20,})\b", "credential material"),
+    # A JSON Web Token carries its own claims and signature.
+    (r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b",
+     "credential material"),
+]
+
+# Identity. These label a memory and no longer gate it. Measured 2026-08-17:
+# 101 of 214 memories classified sensitive, and held-out recall@5 at safe
+# scope was HALF what it was at full (8/20 vs 15/20). The five patterns below
+# stay narrow for the same reason the label stays useful: a version number
+# read as an IP, or a public vendor endpoint read as an internal one, tells a
+# reader nothing true about what the memory names.
+IDENTITY_PATTERNS: list[tuple[str, str]] = [
     # A dotted quad is an IP unless it is a version. "macOS 6.2.0.9" and
     # "logstash 8.14.0.1" identify no host.
     (r"(?<![\w.])(?<!v)(?<!version )(?<!release )(?<!Version )"
@@ -135,9 +157,6 @@ GENERIC_PATTERNS: list[tuple[str, str]] = [
     # region/account tail, which is the part that identifies an estate.
     (r"\barn:aws:[a-z0-9-]+:[a-z0-9-]*:[^\s:]+", "an AWS ARN"),
     (r"\b\d{12}\b", "an AWS account id"),
-    (r"(?i)\b(?:password|passwd|secret|api[-_ ]?key|credential|private[-_ ]key|"
-     r"\.pem\b|easy-rsa|pki/)\w*", "credential material or its location"),
-    (_TOKEN_PATTERN, "credential material or its location"),
     # git@ and noreply@ on a public forge are addresses of a service, not of
     # a person, and appear in every clone URL.
     (r"(?i)(?<![\w.+-])(?!git@|noreply@|no-reply@)[\w.+-]+@"
@@ -149,7 +168,7 @@ GENERIC_PATTERNS: list[tuple[str, str]] = [
     (r"(?i)\b(?:client|tenant|customer)\b.{0,40}\b(?:rfp|audit|pursuit|onboard)",
      "a named client engagement"),
     # Public vendor endpoints are documentation, not an estate. Everything
-    # else on a real TLD still classifies.
+    # else on a real TLD still carries the label.
     (r"(?i)\bhttps?://(?!(?:docs\.|www\.|login\.|management\.|sts\.)?"
      r"(?:anthropic|github|gitlab|arxiv|python|clickhouse|opensearch|"
      r"microsoft|windows|azure|usgovcloudapi|amazonaws|googleapis|"
@@ -236,17 +255,26 @@ def load_sensitive_patterns(path: str | None = None) -> list[tuple[str, str]]:
 
 
 def sensitive_patterns() -> list[tuple[str, str]]:
-    return GENERIC_PATTERNS + load_sensitive_patterns()
+    """Every pattern, both classes. Credentials first."""
+    return CREDENTIAL_PATTERNS + IDENTITY_PATTERNS + load_sensitive_patterns()
 
 
 def sensitivity(text: str) -> list[str]:
-    """Why this memory should not leave a trusted harness. Empty means safe.
+    """Why this memory must not leave a trusted harness. Empty means safe.
 
-    Deliberately over-inclusive. Under-classifying leaks an identifier to a
-    third-party model; over-classifying costs a recall that the operator can
-    always unlock with --scope full. Those are not symmetric mistakes.
+    Credential material only. A credential leaks a way in, and no recall is
+    worth that. A client name, a host or an account id leaks who the work was
+    for, which the operator already accepts, and withholding it hides the
+    template the work shares with every other engagement.
     """
-    return sorted({why for pat, why in sensitive_patterns()
+    return sorted({why for pat, why in CREDENTIAL_PATTERNS
+                   if re.search(pat, text)})
+
+
+def identifies(text: str) -> list[str]:
+    """What this memory names. A label for the reader, never a gate."""
+    return sorted({why for pat, why in
+                   IDENTITY_PATTERNS + load_sensitive_patterns()
                    if re.search(pat, text)})
 
 
@@ -621,7 +649,12 @@ def recall(
         meta = mem_meta(conn, r["id"])
         if kind and meta.get("kind") != kind:
             continue
-        if scope != "full" and meta.get("sensitive"):
+        # Recomputed from the text, never read from the stored flag: the
+        # index holds a verdict from whatever rules were current when the
+        # memory was retained, and the rules changed. Rebuilding the index
+        # would apply them too, but a rebuild deletes the memory nodes and
+        # the curated edges that markdown import cannot restore.
+        if scope != "full" and sensitivity(r["text"]):
             withheld += 1
             continue
         # bm25() is negative-is-better in SQLite; flip it so bigger is better.
@@ -701,7 +734,7 @@ def recall(
                 meta = mem_meta(conn, nid)
                 if kind and meta.get("kind") != kind:
                     continue
-                if scope != "full" and meta.get("sensitive"):
+                if scope != "full" and sensitivity(row["statement"]):
                     withheld += 1
                     continue
                 have.add(nid)
@@ -723,10 +756,11 @@ def recall(
         # somewhere trusted.
         out.append({"id": "__withheld__", "text":
                     f"{withheld} more {'memory' if withheld == 1 else 'memories'}"
-                    " matched, but they name a client, a host or a credential, "
-                    "and this tool is not set up to see those. To include them, "
-                    "run the search again with --scope full, or run it from a "
-                    "tool you trust with that detail.",
+                    " matched, but they contain credential material, and this "
+                    "tool is not set up to see that. Client names, hosts and "
+                    "account ids are not withheld. To include the rest, run the "
+                    "search again with --scope full, or run it from a tool you "
+                    "trust with a credential.",
                     "kind": "model", "tags": [], "source": "", "created_at": "",
                     "score": 0.0, "coverage": 0.0, "matched": [],
                     "superseded_by": None, "withheld": withheld})
